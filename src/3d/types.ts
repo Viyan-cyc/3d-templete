@@ -65,6 +65,39 @@ export interface ModelDef {
   color?: string
   /** 传递给组件的自定义属性 */
   props?: Record<string, unknown>
+  /** CSS2D 卡片配置 */
+  card?: CardDef
+}
+
+// ---- CSS2D 卡片 ----
+
+/**
+ * JSON 中声明的卡片配置（挂在 ModelDef.card 上）
+ */
+export interface CardDef {
+  /**
+   * 卡片类型 —— 决定用哪个 Vue 卡片组件渲染。
+   * 与 CardRegistry 中注册的类型名对应，如 'agv'、'container'。
+   * 不填则回退到 ModelDef.componentName → ModelDef.type。
+   */
+  cardType?: string
+  /** 是否常显 */
+  alwaysVisible?: boolean
+  /**
+   * 交互模式：
+   * - 'always' : 始终显示
+   * - 'click'  : 点击物体后显示/隐藏（同 interactiveGroup 内互斥）
+   */
+  mode?: 'always' | 'click'
+  /**
+   * 交互分组。mode='click' 时，同一分组内同时只显示一个卡片。
+   * 默认使用 type 字段（即 CardHost 中注册的卡片类型名）作为分组。
+   */
+  interactiveGroup?: string
+  /** 物体上方偏移 [x, y, z]，默认 [0, 1.5, 0] */
+  offset?: [number, number, number]
+  /** 透传给 Vue 卡片组件的业务数据 */
+  props?: Record<string, unknown>
 }
 
 // ---- 场景数据 (JSON 顶层结构) ----
