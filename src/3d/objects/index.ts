@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import type { ModelDef } from '../types'
 import { ComponentRegistry } from '../components/ComponentRegistry'
-import type { App3D } from '../App3D'
 
 // ---- 基础几何体 ----
 
@@ -81,18 +80,13 @@ export function createAxesHelper(size: number = 5): THREE.AxesHelper {
 export interface CreateObjectResult {
   /** 创建的物体 */
   objects: THREE.Object3D[]
-  /** 若为 component 类型，返回组件引用（用于 update/dispose 钩子） */
-  component?: import('../components/I3DComponent').I3DComponent
 }
 
 /**
  * 根据 ModelDef 创建 3D 物体。
  * 支持内置类型 (cube/sphere/plane/gltf) 和注册组件 (type: 'component')。
  */
-export function createObjectFromDef(
-  def: ModelDef,
-  app: App3D,
-): CreateObjectResult | null {
+export function createObjectFromDef(def: ModelDef): CreateObjectResult | null {
   const pos = def.position ?? [0, 0, 0]
   const rot = def.rotation ?? [0, 0, 0]
   const scl = def.scale ?? [1, 1, 1]
@@ -153,22 +147,14 @@ export function createObjectFromDef(
         console.warn(`[objects] "component" 类型缺少 componentName`)
         return null
       }
-      const component = ComponentRegistry.get(componentName)
-      if (!component) {
-        console.warn(`[objects] 组件 "${componentName}" 未注册，可用组件: ${ComponentRegistry.list().join(', ')}`)
-        return null
-      }
-      const result = component.setup(app, def.props ?? {})
-      if (!result) return { objects: [], component }
+      const obj = ComponentRegistry.create(componentName, def.props ?? {})
+      if (!obj) return null
 
-      const arr = Array.isArray(result) ? result : [result]
-      arr.forEach((obj) => {
-        obj.name = def.id
-        obj.position.set(...pos)
-        obj.rotation.set(...rot)
-        obj.scale.set(...scl)
-      })
-      return { objects: arr, component }
+      obj.name = def.id
+      obj.position.set(...pos)
+      obj.rotation.set(...rot)
+      obj.scale.set(...scl)
+      return { objects: [obj] }
     }
 
     default:

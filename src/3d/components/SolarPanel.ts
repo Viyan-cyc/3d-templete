@@ -13,7 +13,7 @@ import * as THREE from 'three'
  *    const panel = new SolarPanel({ panelWidth: 2, panelHeight: 1.2 })
  *    scene.add(panel)
  *
- *  用法 2：通过 SolarPanelComponent 包装 → ComponentRegistry → JSON 驱动
+ *  用法 2：JSON 驱动（ComponentRegistry.register('SolarPanel', SolarPanel) → type:'component'）
  * ============================================================
  */
 

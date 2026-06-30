@@ -7,7 +7,7 @@ import * as THREE from 'three'
 //    const shelf = new Shelf({ rows: 3, cols: 5, layers: 4 })
 //    scene.add(shelf)
 //
-//  用法 2：通过 ShelfComponent 包装 → 注册到 ComponentRegistry → JSON 驱动
+//  用法 2：JSON 驱动（ComponentRegistry.register('Shelf', Shelf) → type:'component'）
 //    { type: 'component', componentName: 'Shelf', props: { rows: 3, cols: 5, layers: 4 } }
 // ============================================================
 

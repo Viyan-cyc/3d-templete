@@ -1,45 +1,51 @@
-import type { I3DComponent } from './I3DComponent'
+import type * as THREE from 'three'
 
 /**
  * ============================================================
- *  ComponentRegistry — 3D 组件注册中心
+ *  ComponentCtor — 组件构造器约定
  *
- *  外部可通过 register() 注册自定义组件（npm 包或本地）。
- *  场景初始化时，遇到 type: 'component' 的 ModelDef，
- *  会从此注册表中查找对应组件并调用其 setup()。
+ *  任何符合此签名的类都可以注册：
+ *    constructor(props?: Record<string, unknown>): THREE.Object3D
+ *
+ *  npm 包不需要实现任何接口，构造函数接受可选 props 即可。
  * ============================================================
  */
+export type ComponentCtor = new (props?: Record<string, unknown>) => THREE.Object3D
+
 class ComponentRegistryImpl {
-  private _components: Map<string, I3DComponent> = new Map()
+  private _ctors: Map<string, ComponentCtor> = new Map()
 
-  /** 注册一个组件 */
-  register(component: I3DComponent): void {
-    if (this._components.has(component.name)) {
-      console.warn(`[ComponentRegistry] 组件 "${component.name}" 已存在，将被覆盖。`)
+  register(name: string, ctor: ComponentCtor): void {
+    if (this._ctors.has(name)) {
+      console.warn(`[ComponentRegistry] "${name}" 已存在，将被覆盖。`)
     }
-    this._components.set(component.name, component)
+    this._ctors.set(name, ctor)
   }
 
-  /** 批量注册 */
-  registerAll(components: I3DComponent[]): void {
-    components.forEach((c) => this.register(c))
+  registerAll(entries: Array<[string, ComponentCtor]>): void {
+    entries.forEach(([name, ctor]) => this.register(name, ctor))
   }
 
-  /** 获取组件 */
-  get(name: string): I3DComponent | undefined {
-    return this._components.get(name)
+  get(name: string): ComponentCtor | undefined {
+    return this._ctors.get(name)
   }
 
-  /** 检查组件是否存在 */
   has(name: string): boolean {
-    return this._components.has(name)
+    return this._ctors.has(name)
   }
 
-  /** 列出所有已注册的组件名 */
   list(): string[] {
-    return Array.from(this._components.keys())
+    return Array.from(this._ctors.keys())
+  }
+
+  create(name: string, props?: Record<string, unknown>): THREE.Object3D | null {
+    const Ctor = this._ctors.get(name)
+    if (!Ctor) {
+      console.warn(`[ComponentRegistry] "${name}" 未注册，可用: ${this.list().join(', ')}`)
+      return null
+    }
+    return new Ctor(props)
   }
 }
 
-/** 全局单例 */
 export const ComponentRegistry = new ComponentRegistryImpl()
