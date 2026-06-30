@@ -71,7 +71,6 @@ export function initScene(
   })
 
   // resize 同步
-  const originalResize = app['_onResize']?.bind?.(app)
   const resizeObserver = new ResizeObserver(() => {
     cardManager.resize(cssContainer.clientWidth, cssContainer.clientHeight)
   })
@@ -95,6 +94,21 @@ export function initScene(
     },
   }
 }
+
+// ---- live-data 加载器 ----
+export {
+  loadLiveDataConfig,
+  applyLiveDataToApp,
+} from './utils/liveDataLoader'
+export type {
+  LiveDataConfig,
+  LiveDataCamera,
+  LiveDataLight,
+  LiveDataObject,
+  LiveDataGeometry,
+  LiveDataMaterial,
+  ApplyLiveDataOptions,
+} from './utils/liveDataLoader'
 
 // ---- 导出 ----
 export { App3D } from './App3D'

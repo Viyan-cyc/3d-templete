@@ -64,7 +64,7 @@ const DEFAULT_OPTIONS: Required<Omit<ShelfOptions, 'shelfColor' | 'postColor'>> 
 }
 
 export class Shelf extends THREE.Group {
-  readonly shelfOptions: Required<ShelfOptions> & Pick<ShelfOptions, 'shelfColor' | 'postColor'>
+  readonly shelfOptions: Required<ShelfOptions> & Partial<Pick<ShelfOptions, 'shelfColor' | 'postColor'>>
 
   /** 立柱组（方便单独控制显隐） */
   readonly posts: THREE.Group
@@ -82,8 +82,7 @@ export class Shelf extends THREE.Group {
   constructor(options: ShelfOptions = {}) {
     super()
 
-    this.shelfOptions = { ...DEFAULT_OPTIONS, ...options }
-    const opts = this.shelfOptions
+    this.shelfOptions = { ...DEFAULT_OPTIONS, ...options } as Shelf['shelfOptions']
 
     this.posts = new THREE.Group()
     this.posts.name = 'Posts'
@@ -166,7 +165,7 @@ export class Shelf extends THREE.Group {
 
   /** 四角立柱 */
   private _buildPosts(): void {
-    const { rows, cols, layers, cellWidth, cellDepth, cellHeight, postThickness, shelfThickness, postColor } =
+    const { postThickness, postColor } =
       this.shelfOptions
 
     const totalH = this.totalHeight
@@ -205,7 +204,7 @@ export class Shelf extends THREE.Group {
 
   /** 每层的水平层板 */
   private _buildShelves(): void {
-    const { rows, cols, layers, cellWidth, cellDepth, cellHeight, shelfThickness, shelfColor, color } =
+    const { layers, cellHeight, shelfThickness, shelfColor, color } =
       this.shelfOptions
 
     const sColor = shelfColor ?? color
@@ -235,7 +234,7 @@ export class Shelf extends THREE.Group {
 
   /** 列之间的竖隔板 */
   private _buildDividers(): void {
-    const { rows, cols, cellWidth, cellHeight, cellDepth, layers, shelfThickness, dividerThickness, color } =
+    const { rows, cols, cellWidth, cellDepth, dividerThickness, color } =
       this.shelfOptions
 
     if (dividerThickness <= 0) return
@@ -246,18 +245,9 @@ export class Shelf extends THREE.Group {
       metalness: 0.1,
     })
 
-    const totalD = this.totalDepth
     const halfW = this.totalWidth / 2
     const totalH = this.totalHeight
-    const cellStepX = cellWidth
-    const cellStepZ = cellDepth
-    const halfD = totalD / 2
-
-    // X 方向隔板（col 之间）
-    for (let col = 1; col < cols; col++) {
-      const x = -halfW + col * cellStepZ // 注意：Z 深度方向按列处理
-      // Z-depth dividers — these run along X
-    }
+    const halfD = this.totalDepth / 2
 
     // Y 方向不需要隔板（因为层板已经充当）
 
@@ -265,7 +255,7 @@ export class Shelf extends THREE.Group {
     for (let r = 1; r < rows; r++) {
       const x = -halfW + r * cellWidth
       const board = new THREE.Mesh(
-        new THREE.BoxGeometry(dividerThickness, totalH, totalD),
+        new THREE.BoxGeometry(dividerThickness, totalH, this.totalDepth),
         dividerMat,
       )
       board.position.set(x, totalH / 2, 0)

@@ -310,7 +310,7 @@ export class CardManager {
       } else {
         this.showCard(entry.id)
       }
-    } else if (entry.def.mode === 'hover') {
+    } else if ((entry.def.mode as string) === 'hover') {
       // hover 模式由外部 CSS :hover 处理
     }
   }

@@ -8,11 +8,19 @@
  */
 
 import type { SceneData } from '@/3d/types'
+import type { LiveDataConfig } from '@/3d/utils/liveDataLoader'
 
 /** 场景数据 API 响应 */
 export interface SceneDataResponse {
   code: number
   data: SceneData
+  message: string
+}
+
+/** live-data 格式 API 响应 */
+export interface LiveDataResponse {
+  code: number
+  data: LiveDataConfig
   message: string
 }
 

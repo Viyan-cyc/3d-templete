@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp /Users/zengshufeng/Documents/3D/octoAgents/public/live-data.json /Users/zengshufeng/Documents/3D/3d-templete/public/live-data.json)",
+      "Bash(jobs -l)",
+      "Bash(curl -s http://localhost:3001/api/scene/live-data)",
+      "Bash(curl -s http://localhost:3001/live-data.json)",
+      "Bash(kill %2)"
+    ],
+    "additionalDirectories": [
+      "/Users/zengshufeng/Documents/3D/octoAgents/public"
+    ]
+  }
+}

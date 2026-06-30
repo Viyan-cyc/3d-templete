@@ -31,7 +31,7 @@ export class ShelfComponent implements I3DComponent {
 
   private _shelf: Shelf | null = null
 
-  setup(app: App3D, props: Record<string, unknown>): THREE.Object3D {
+  setup(_app: App3D, props: Record<string, unknown>): THREE.Object3D {
     const options: ShelfOptions = {
       rows: (props.rows as number) ?? 3,
       cols: (props.cols as number) ?? 1,

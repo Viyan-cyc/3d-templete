@@ -62,7 +62,7 @@ const DEFAULTS: Required<Omit<SolarPanelOptions, 'standColor'>> = {
 }
 
 export class SolarPanel extends THREE.Group {
-  readonly options: Required<SolarPanelOptions> & Pick<SolarPanelOptions, 'standColor'>
+  readonly options: Required<SolarPanelOptions> & Partial<Pick<SolarPanelOptions, 'standColor'>>
 
   /** 光伏板主体（面板+电池片+边框） */
   readonly panelGroup: THREE.Group
@@ -74,7 +74,7 @@ export class SolarPanel extends THREE.Group {
 
   constructor(options: SolarPanelOptions = {}) {
     super()
-    this.options = { ...DEFAULTS, ...options }
+    this.options = { ...DEFAULTS, ...options } as SolarPanel['options']
 
     this.panelGroup = new THREE.Group()
     this.panelGroup.name = 'SolarPanel-Body'

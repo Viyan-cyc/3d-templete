@@ -1,12 +1,12 @@
 import { OrbitControls as _OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import type { Camera, DOMElement } from 'three'
+import type { Camera } from 'three'
 
 /**
  * 创建并配置轨道控制器
  */
 export function createOrbitControls(
   camera: Camera,
-  domElement: DOMElement,
+  domElement: HTMLElement,
   options?: {
     enableDamping?: boolean
     dampingFactor?: number

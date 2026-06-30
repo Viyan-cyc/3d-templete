@@ -1,4 +1,5 @@
 import type { MockMethod } from 'vite-plugin-mock'
+import liveData from '../public/live-data.json'
 
 export default [
   {
@@ -113,6 +114,17 @@ export default [
             },
           ],
         },
+        message: 'ok',
+      }
+    },
+  },
+  {
+    url: '/api/scene/live-data',
+    method: 'get',
+    response: (): { code: number; data: typeof liveData; message: string } => {
+      return {
+        code: 0,
+        data: liveData,
         message: 'ok',
       }
     },
