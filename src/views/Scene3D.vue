@@ -2,10 +2,8 @@
   <div ref="sceneContainer" class="scene-page">
     <canvas ref="canvasRef" class="scene-canvas"></canvas>
 
-    <!-- ★ CardHost: 将 Vue 卡片组件 Teleport 到 3D CSS2D 层 -->
     <CardHost :cards="cardStates" :registry="cardComponentRegistry" />
 
-    <!-- 工具栏 -->
     <div class="toolbar">
       <div class="toolbar-group">
         <button @click="toggleAGV">{{ agvVisible ? '隐藏 AGV' : '显示 AGV' }}</button>
@@ -15,7 +13,6 @@
       </div>
     </div>
 
-    <!-- 加载 / 错误 -->
     <div class="loading-overlay" v-if="loading">
       <div class="spinner"></div>
       <p>{{ statusText }}</p>
@@ -27,22 +24,16 @@
 </template>
 
 <script setup lang="ts">
-/**
- * ============================================================
- *  Scene3D.vue — 3D 场景入口 + 卡片系统集成示例
- *
- *  完整流程：
- *  1. 注册卡片 Vue 组件类型
- *  2. 获取 JSON 数据（含 card 声明）
- *  3. initScene(canvas, data) → 场景 + CardManager
- *  4. CardManager.onStateChange → 驱动 CardHost 渲染
- *  5. 工具栏控制卡片显隐
- *  6. onUnmounted 销毁
- * ============================================================
- */
 import { ref, onMounted, onUnmounted } from 'vue'
 import { initScene, CardHost, cardComponentRegistry } from '@/3d'
 import { fetchSceneData } from '@/network/api/scene'
+import {
+  ShelfComponent, demoJsonDrivenShelf,
+  SolarPanelComponent, SolarPanel,
+  ComponentRegistry,
+} from '@/3d'
+import { createObjectFromDef } from '@/3d/objects'
+import type { ModelDef } from '@/3d/types'
 import AGVCard from '@/components/cards/AGVCard.vue'
 import ContainerCard from '@/components/cards/ContainerCard.vue'
 import type { SceneAPI, CardState } from '@/3d'
@@ -50,9 +41,12 @@ import type { SceneData } from '@/3d/types'
 import type { Component } from 'vue'
 
 // ---- 注册卡片 Vue 组件 ----
-// 类型名与 JSON card.cardType 对应
 cardComponentRegistry.register('agv', AGVCard as unknown as Component)
 cardComponentRegistry.register('container', ContainerCard as unknown as Component)
+
+// ---- 注册 3D 组件 ----
+ComponentRegistry.register(new ShelfComponent())
+ComponentRegistry.register(new SolarPanelComponent())
 
 // ---- 状态 ----
 const sceneContainer = ref<HTMLElement | null>(null)
@@ -66,24 +60,79 @@ const agvVisible = ref(true)
 let sceneAPI: SceneAPI | null = null
 let unsubCards: (() => void) | null = null
 
+// ============================================================
+//  光伏板演示 — 同时展示 new 和 JSON 驱动两种用法
+// ============================================================
+function demoSolarPanels(api: SceneAPI): void {
+  const { app } = api
+
+  // --- 用法 1: 直接 new SolarPanel() ---
+  // 地面光伏阵列，3 块并排
+  const tilt = Math.PI / 6
+  ;[
+    { x: -3, z: 0 },
+    { x: 0, z: 0 },
+    { x: 3, z: 0 },
+  ].forEach(({ x, z }) => {
+    const panel = new SolarPanel({
+      panelWidth: 1.8,
+      panelHeight: 1.1,
+      tiltAngle: tilt,
+      standHeight: 0.8,
+      cellRows: 6,
+      cellCols: 8,
+    })
+    panel.position.set(x, 0, z)
+    panel.rotation.y = 0.3
+    panel.name = `PV-Direct-${x}`
+    app.scene.add(panel)
+  })
+
+  // --- 用法 2: JSON 驱动 ---
+  const solarModelDef: ModelDef = {
+    id: 'pv-json-driven',
+    type: 'component',
+    componentName: 'SolarPanel',
+    position: [0, 0, -3],
+    rotation: [0, 0.5, 0],
+    props: {
+      panelWidth: 2.0,
+      panelHeight: 1.3,
+      tiltAngle: 0.45,
+      standHeight: 1.2,
+      cellRows: 8,
+      cellCols: 12,
+      cellColor: '#1a3a5c',
+      frameColor: '#B0B0B0',
+      standColor: '#4a4a4a',
+    },
+  }
+
+  const result = createObjectFromDef(solarModelDef, app)
+  if (result) {
+    result.objects.forEach((obj) => app.scene.add(obj))
+    console.log('[SolarPanel] JSON driven panel created')
+  }
+}
+
 // ---- 生命周期 ----
 onMounted(async () => {
   const canvas = canvasRef.value
   if (!canvas) { error.value = 'Canvas 不存在'; return }
 
   try {
-    // [1] 获取数据
     const response = await fetchSceneData('default')
     const sceneData: SceneData = response.data
 
-    // [2] 初始化场景 + 卡片系统
     sceneAPI = initScene(canvas, sceneData, sceneContainer.value ?? undefined)
 
-    // [3] 订阅卡片状态 → CardHost 响应式渲染
+    // ★ 货架 + 光伏板
+    demoJsonDrivenShelf(sceneAPI)
+    demoSolarPanels(sceneAPI)
+
     unsubCards = sceneAPI.cardManager.onStateChange((cards) => {
       cardStates.value = cards
     })
-    // 初始触发一次
     cardStates.value = sceneAPI.cardManager.getCardStates()
 
     loading.value = false; statusText.value = ''
@@ -94,6 +143,10 @@ onMounted(async () => {
     if (sceneAPI) {
       unsubCards = sceneAPI.cardManager.onStateChange((cards) => { cardStates.value = cards })
       cardStates.value = sceneAPI.cardManager.getCardStates()
+
+      // ★ 默认场景也加上货架 + 光伏板
+      demoJsonDrivenShelf(sceneAPI)
+      demoSolarPanels(sceneAPI)
     }
     loading.value = false; statusText.value = ''
     error.value = `数据加载失败 (${msg})，使用默认场景。`
@@ -106,7 +159,6 @@ onUnmounted(() => {
   sceneAPI = null
 })
 
-// ---- 卡片控制 ----
 function toggleAGV() {
   if (!sceneAPI) return
   if (agvVisible.value) {
@@ -125,8 +177,6 @@ function toggleAGV() {
 .scene-canvas {
   display: block; width: 100%; height: 100%;
 }
-
-/* 工具栏 */
 .toolbar {
   position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 16px; align-items: center;
@@ -140,8 +190,6 @@ function toggleAGV() {
 }
 .toolbar-group button:hover { background: rgba(255,255,255,0.15); }
 .hint { font-size: 13px; color: #888; }
-
-/* 加载 / 错误 */
 .loading-overlay {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
