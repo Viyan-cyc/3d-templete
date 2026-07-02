@@ -4,7 +4,6 @@ export type { ComponentCtor } from './ComponentRegistry'
 // Shelf
 export { Shelf } from './Shelf'
 export type { ShelfOptions, ShelfCellCoord } from './Shelf'
-export { demoJsonDrivenShelf, SHELF_SCENE_DATA_EXAMPLE } from './ShelfExample'
 
 // SolarPanel
 export { SolarPanel } from './SolarPanel'
