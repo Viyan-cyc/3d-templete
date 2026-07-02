@@ -141,18 +141,20 @@ export interface ApplyLiveDataOptions {
 }
 
 /**
- * 将 live-data 场景配置应用到已有的 App3D 实例。
+ * 将 live-data 场景配置应用到已有的 App3D 实例（一次性建场景）。
  *
  * 会：
  * 1. 设置背景色/雾
  * 2. 根据 camera.type 替换相机（支持 OrthographicCamera）
  * 3. 清空并重建 scene 中的物体和灯光
+ *
+ * @returns 所有 live-data 对象的 id → Object3D 索引（供增量更新使用）
  */
 export function applyLiveDataToApp(
   app: App3D,
   config: LiveDataConfig,
   options: ApplyLiveDataOptions,
-): void {
+): Map<string, THREE.Object3D> {
   const { viewSize } = options
 
   // ── 1. 场景基础 ──
@@ -194,8 +196,8 @@ export function applyLiveDataToApp(
   newCamera.lookAt(...(camCfg.lookAt.slice(0, 3) as [number, number, number]))
   newCamera.updateProjectionMatrix()
 
-  // 替换 app 上的 camera
-  ;(app as unknown as Record<string, unknown>).camera = newCamera
+  // 替换 app 上的 camera（通过 setCamera，正交相机 resize 时按 aspect 重算）
+  app.setCamera(newCamera)
 
   // ── 4. 灯光 ──
   if (config.lights) {
@@ -206,9 +208,8 @@ export function applyLiveDataToApp(
   }
 
   // ── 5. 对象层级树（两遍构建） ──
+  const nodeMap = new Map<string, THREE.Object3D>()
   if (config.objects) {
-    const nodeMap = new Map<string, THREE.Object3D>()
-
     // 第一遍：创建
     for (const oc of config.objects) {
       const node = createLiveObject3D(oc)
@@ -231,13 +232,15 @@ export function applyLiveDataToApp(
       }
     }
   }
+
+  return nodeMap
 }
 
 // ══════════════════════════════════════════════════════════════
 // Object3D 工厂
 // ══════════════════════════════════════════════════════════════
 
-function createLiveObject3D(
+export function createLiveObject3D(
   cfg: LiveDataObject,
 ): THREE.Object3D | null {
   let obj: THREE.Object3D | null = null
@@ -280,7 +283,7 @@ function createLiveMesh(cfg: LiveDataObject): THREE.Mesh | null {
 
 // ── 几何体工厂 ──
 
-function createLiveGeometry(
+export function createLiveGeometry(
   geoDef: LiveDataGeometry,
 ): THREE.BufferGeometry | null {
   const p = geoDef.params ?? {}
@@ -339,7 +342,7 @@ function createLiveGeometry(
 
 // ── 材质工厂 ──
 
-function createLiveMaterial(
+export function createLiveMaterial(
   matDef?: LiveDataMaterial,
 ): THREE.Material {
   if (!matDef) return new THREE.MeshNormalMaterial()
@@ -450,7 +453,7 @@ function createLiveLight(cfg: LiveDataLight): THREE.Light | null {
 // ══════════════════════════════════════════════════════════════
 
 /** 给 Object3D 应用 position / rotation / scale */
-function applyTransform(
+export function applyTransform(
   obj: THREE.Object3D,
   cfg: { position?: number[]; rotation?: number[]; scale?: number[] },
 ): void {

@@ -23,11 +23,3 @@ export interface CardState {
   /** 透传的业务 props */
   props: Record<string, unknown>
 }
-
-/**
- * 卡片事件回调
- */
-export interface CardEvents {
-  onShow?: (cardId: string) => void
-  onHide?: (cardId: string) => void
-}

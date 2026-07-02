@@ -1,0 +1,183 @@
+/**
+ * ============================================================
+ *  createScene3D — 3D 模块唯一对外主入口
+ *
+ *  业务方只需：
+ *    const data = await fetch('/api/scene').then(r => r.json())  // 数据由业务方请求
+ *    const handle = createScene3D(canvas, data, { cardRules })
+ *    handle.onCardState(states => cardStates.value = states)
+ *
+ *    // 之后按 id 增删改物体（移动的 AGV、变色的状态、动态增删实体…）
+ *    handle.update({ objects: { upsert: [...], remove: [...] } })
+ *
+ *    onUnmounted(() => handle.dispose())
+ *
+ *  引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
+ *  CSS2D 卡片层 / resize / dispose 全部在这里封装，业务方无需感知。
+ * ============================================================
+ */
+
+import * as THREE from 'three'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { App3D } from './App3D'
+import { CardManager } from './cards/CardManager'
+import type { CardStateCallback } from './cards/CardManager'
+import { createOrbitControls } from './controls/OrbitControls'
+import { createGridHelper, createAxesHelper } from './objects'
+import {
+  applyLiveDataToApp,
+  type LiveDataConfig,
+  type LiveDataObject,
+} from './utils/liveDataLoader'
+import { scanAndRegisterCards, type CardScanRule } from './utils/sceneCards'
+import {
+  refreshCards,
+  removeObjects,
+  upsertObjects,
+  type ObjectIndex,
+} from './utils/sceneUpdate'
+
+export interface Scene3DControlsOptions {
+  minDistance?: number
+  maxDistance?: number
+  maxPolarAngle?: number
+  target?: { x: number; y: number; z: number }
+}
+
+export interface Scene3DOptions {
+  /** 卡片命名扫描规则（业务方提供，决定哪些物体挂卡片） */
+  cardRules?: CardScanRule[]
+  /** 卡片 CSS2D 层挂载容器，默认 canvas.parentElement */
+  container?: HTMLElement
+  /** 是否显示 grid/axes 调试辅助，默认 false */
+  debug?: boolean
+  /** OrbitControls 配置 */
+  controls?: Scene3DControlsOptions
+  /** 是否启用阴影，默认 true */
+  enableShadows?: boolean
+}
+
+/** 物体级增量更新补丁 */
+export interface SceneUpdatePatch {
+  objects?: {
+    /** 按 id 增/改（id 已存在则就地补丁，保留身份；不存在则创建并挂父） */
+    upsert?: LiveDataObject[]
+    /** 按 id 删除 */
+    remove?: string[]
+  }
+}
+
+export interface Scene3DHandle {
+  app: App3D
+  cardManager: CardManager
+  /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
+  controls: OrbitControlsInstance
+  /** 订阅卡片状态变化，喂给 <CardHost :cards> */
+  onCardState(cb: CardStateCallback): () => void
+  /** 物体级增量更新（按 id 增删改），自动同步受影响的卡片 */
+  update(patch: SceneUpdatePatch): void
+  /** 销毁：释放 GPU/DOM/事件资源 */
+  dispose(): void
+}
+
+/** OrbitControls 实例类型（便于外部声明变量类型时引用） */
+export type OrbitControlsInstance = ReturnType<typeof createOrbitControls>
+
+/**
+ * 初始化一个完整的 live-data 驱动 3D 场景。
+ *
+ * @param canvas  调用方的 <canvas>
+ * @param data    场景数据（LiveDataConfig，由业务方请求后传入）
+ * @param options 其它选项（卡片规则、控制器、调试等）
+ *
+ * 内部顺序（关键）：数据应用 → 替换相机 → 再创建控制器与卡片层，
+ * 确保它们绑定的是最终相机（正交/透视）。同步返回，无内部请求。
+ */
+export function createScene3D(
+  canvas: HTMLCanvasElement,
+  data: LiveDataConfig,
+  options: Scene3DOptions = {},
+): Scene3DHandle {
+  const { cardRules, debug = false, controls: controlsOpts, enableShadows = true } = options
+  const container = options.container ?? canvas.parentElement ?? document.body
+
+  // 1. 3D 引擎
+  const app = new App3D({ canvas, enableShadows, antialias: true })
+
+  // 2. 应用数据（内部 app.setCamera 替换相机），拿到 id→Object3D 索引供 update 用
+  const width = canvas.clientWidth || container.clientWidth || 1
+  const height = canvas.clientHeight || container.clientHeight || 1
+  const objectIndex: ObjectIndex = applyLiveDataToApp(app, data, {
+    viewSize: { width, height },
+  })
+
+  // 3. IBL 环境光（PMREM）—— physical 材质必需；按 config.scene.environment 驱动
+  applyEnvironment(app, data)
+
+  // 4. OrbitControls（相机替换之后再创建）
+  const controls = createOrbitControls(app.camera, canvas, controlsOpts)
+
+  // 5. 卡片系统（CSS2D）—— 相机替换之后再 attach
+  const cardManager = new CardManager()
+  cardManager.attach(container, app.camera, canvas)
+
+  // 6. 按业务规则扫描场景、注册卡片
+  scanAndRegisterCards(app.scene, cardManager, cardRules ?? [])
+
+  // 7. 调试辅助
+  if (debug) {
+    app.scene.add(createGridHelper())
+    app.scene.add(createAxesHelper(5))
+  }
+
+  // 8. 接入 App3D 自有渲染循环（update → WebGL render → CSS2D post-render）
+  app.addUpdateCallback(() => controls.update())
+  app.addPostRenderCallback(() => cardManager.render(app.scene, app.camera))
+  app.start() // App3D 内部接管 RAF + window resize（含相机 aspect/正交重算）
+
+  // 9. CSS2D 层尺寸随容器变化（App3D 只管 WebGL canvas 与相机）
+  const resizeObserver = new ResizeObserver(() => {
+    cardManager.resize(container.clientWidth, container.clientHeight)
+  })
+  resizeObserver.observe(container)
+
+  let disposed = false
+
+  return {
+    app,
+    cardManager,
+    controls,
+    onCardState: (cb) => cardManager.onStateChange(cb),
+    update(patch: SceneUpdatePatch): void {
+      const changed: string[] = []
+      if (patch.objects?.remove?.length) {
+        changed.push(...removeObjects(objectIndex, patch.objects.remove))
+      }
+      if (patch.objects?.upsert?.length) {
+        changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert))
+      }
+      refreshCards(app.scene, cardManager, cardRules ?? [], changed)
+    },
+    dispose(): void {
+      if (disposed) return
+      disposed = true
+      resizeObserver.disconnect()
+      controls.dispose()
+      cardManager.dispose()
+      app.dispose()
+    },
+  }
+}
+
+/** 根据 live-data 的 scene.environment 配置建立 PMREM 环境光 */
+function applyEnvironment(app: App3D, config: LiveDataConfig): void {
+  const env = config.scene.environment
+  const pmrem = new THREE.PMREMGenerator(app.renderer)
+  // 默认用 RoomEnvironment 作为 IBL；强度由 config 控制
+  const intensity = env?.intensity
+  app.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
+  if (intensity !== undefined) {
+    app.scene.environmentIntensity = intensity
+  }
+  pmrem.dispose()
+}

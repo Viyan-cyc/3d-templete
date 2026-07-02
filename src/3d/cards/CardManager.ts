@@ -5,7 +5,10 @@ import type { CardDef, CardState } from './types'
 interface CardEntry {
   id: string
   type: string
+  /** 卡片定位锚点（css2d 挂在其上） */
   object3D: THREE.Object3D
+  /** 参与射线检测的全部关联物体（一棵树/一栋楼的所有零件） */
+  targets: THREE.Object3D[]
   def: CardDef
   css2d: CSS2DObject
   domEl: HTMLElement
@@ -36,6 +39,8 @@ export class CardManager {
   private _camera: THREE.Camera | null = null
   private _domElement: HTMLElement | null = null
   private _clickHandler: ((e: MouseEvent) => void) | null = null
+  private _pointerDownHandler: ((e: PointerEvent) => void) | null = null
+  private _pointerDownPos: { x: number; y: number } | null = null
   private _frozen: boolean = false
 
   constructor() {
@@ -56,33 +61,53 @@ export class CardManager {
     container.appendChild(this.css2DRenderer.domElement)
 
     // 点击交互监听
+    // pointerdown 记录起点，click 时判断位移，避免 OrbitControls 拖动旋转松手时误触
+    this._pointerDownHandler = (e: PointerEvent) => {
+      this._pointerDownPos = { x: e.clientX, y: e.clientY }
+    }
     this._clickHandler = (e: MouseEvent) => {
       if (this._frozen) return
+      if (this._pointerDownPos) {
+        const dx = e.clientX - this._pointerDownPos.x
+        const dy = e.clientY - this._pointerDownPos.y
+        if (Math.hypot(dx, dy) > 5) return // 视为拖动，忽略
+      }
       const rect = canvas.getBoundingClientRect()
       this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
       this._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
       this._handleClick()
     }
+    canvas.addEventListener('pointerdown', this._pointerDownHandler)
     canvas.addEventListener('click', this._clickHandler)
   }
 
   /**
    * 注册一个卡片
-   * @param id        卡片唯一ID（与关联物体对应）
-   * @param type      卡片类型（如 'agv', 'container'）
-   * @param object3D  关联的 3D 物体
-   * @param def       卡片配置（来自 JSON）
+   *
+   * 一个卡片可关联一组物体（如一棵树的树干+树冠），点击其中任意一个都会命中本卡片。
+   *
+   * @param id      卡片唯一ID（与关联物体对应）
+   * @param type    卡片类型（如 'tree', 'building'）
+   * @param targets 关联的 3D 物体（单个或数组，数组时全部参与射线检测）
+   * @param def     卡片配置（来自 JSON）；def.anchor 指定卡片定位锚点，默认取 targets[0]
    */
   addCard(
     id: string,
     type: string,
-    object3D: THREE.Object3D,
+    targets: THREE.Object3D | THREE.Object3D[],
     def: CardDef = {},
   ): void {
     if (this._cards.has(id)) {
       console.warn(`[CardManager] 卡片 "${id}" 已存在`)
       return
     }
+
+    const targetList = Array.isArray(targets) ? targets : [targets]
+    if (targetList.length === 0) {
+      console.warn(`[CardManager] 卡片 "${id}" 没有关联物体`)
+      return
+    }
+    const anchor = def.anchor ?? targetList[0]
 
     const domEl = document.createElement('div')
     domEl.className = `card-3d card-type-${type}`
@@ -94,17 +119,13 @@ export class CardManager {
 
     const css2d = new CSS2DObject(domEl)
     css2d.name = `card-${id}`
-    css2d.position.copy(object3D.position)
-    if (def.offset) {
-      css2d.position.x += def.offset[0] ?? 0
-      css2d.position.y += def.offset[1] ?? 1.5
-      css2d.position.z += def.offset[2] ?? 0
-    } else {
-      css2d.position.y += 1.5 // 默认在物体上方
-    }
+    // 卡片作为锚点的子节点，position 用 offset 作为相对偏移（默认在锚点上方 1.5）
+    // 注意：不要 copy(anchor.position)，否则作为子节点会导致世界坐标翻倍
+    const off = def.offset ?? [0, 1.5, 0]
+    css2d.position.set(off[0] ?? 0, off[1] ?? 1.5, off[2] ?? 0)
 
-    // 挂到物体上，跟随物体移动
-    object3D.add(css2d)
+    // 挂到锚点上，跟随物体移动
+    anchor.add(css2d)
 
     const alwaysVisible = def.mode === 'always' || def.alwaysVisible === true
     domEl.style.opacity = alwaysVisible ? '1' : '0'
@@ -113,7 +134,8 @@ export class CardManager {
     const entry: CardEntry = {
       id,
       type,
-      object3D,
+      object3D: anchor,
+      targets: targetList,
       def,
       css2d,
       domEl,
@@ -142,7 +164,6 @@ export class CardManager {
     entry.domEl.style.visibility = 'visible'
     entry.domEl.style.opacity = '1'
     this._notify()
-    entry.def.props?.onShow
   }
 
   /** 隐藏卡片（带动画） */
@@ -194,6 +215,15 @@ export class CardManager {
     } else {
       this.showByType(type)
     }
+  }
+
+  /** 隐藏所有 click 模式的卡片（点空白处关闭，不影响 always 模式） */
+  hideAll(): void {
+    this._cards.forEach((entry) => {
+      if (entry.def.mode === 'click' && entry.visible) {
+        this.hideCard(entry.id)
+      }
+    })
   }
 
   /** 冻结/解冻所有卡片交互（场景切换时使用） */
@@ -251,6 +281,9 @@ export class CardManager {
     if (this._clickHandler && this._domElement) {
       this._domElement.removeEventListener('click', this._clickHandler)
     }
+    if (this._pointerDownHandler && this._domElement) {
+      this._domElement.removeEventListener('pointerdown', this._pointerDownHandler)
+    }
     this._cards.forEach((entry) => {
       entry.css2d.removeFromParent()
       entry.domEl.remove()
@@ -265,26 +298,37 @@ export class CardManager {
   private _handleClick(): void {
     if (!this._camera) return
 
-    // 收集所有有卡片的物体
+    // 收集所有卡片关联的物体，建立 object → entry 反查表
+    const objToEntry = new Map<THREE.Object3D, CardEntry>()
     const targets: THREE.Object3D[] = []
     this._cards.forEach((entry) => {
-      targets.push(entry.object3D)
+      entry.targets.forEach((o) => {
+        if (!objToEntry.has(o)) {
+          objToEntry.set(o, entry)
+          targets.push(o)
+        }
+      })
     })
+
+    if (targets.length === 0) return
 
     this._raycaster.setFromCamera(this._mouse, this._camera)
     const intersects = this._raycaster.intersectObjects(targets, true)
 
     if (intersects.length > 0) {
-      // 找到被点击物体关联的卡片
-      let hit = intersects[0].object
+      // 沿父子链找到关联卡片的 entry（兼容嵌套物体）
+      let hit: THREE.Object3D | null = intersects[0].object
       while (hit) {
-        const entry = Array.from(this._cards.values()).find((e) => e.object3D === hit)
+        const entry = objToEntry.get(hit)
         if (entry) {
           this._onCardClicked(entry)
           return
         }
-        hit = hit.parent as THREE.Object3D
+        hit = hit.parent
       }
+    } else {
+      // 点空白：关闭所有 click 模式卡片
+      this.hideAll()
     }
   }
 
@@ -310,9 +354,8 @@ export class CardManager {
       } else {
         this.showCard(entry.id)
       }
-    } else if ((entry.def.mode as string) === 'hover') {
-      // hover 模式由外部 CSS :hover 处理
     }
+    // mode === 'always' 或未设置：点击不切换显隐
   }
 
   private _notify(): void {

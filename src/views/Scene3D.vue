@@ -1,6 +1,7 @@
 <template>
   <div class="scene-page">
     <canvas ref="canvasRef" class="scene-canvas"></canvas>
+    <CardHost :cards="cardStates" />
 
     <div class="loading-overlay" v-if="loading">
       <div class="spinner"></div>
@@ -14,89 +15,68 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import * as THREE from 'three'
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { App3D, loadLiveDataConfig, applyLiveDataToApp } from '@/3d'
-import { createOrbitControls } from '@/3d/controls/OrbitControls'
+import {
+  createScene3D,
+  CardHost,
+  loadLiveDataConfig,
+  type Scene3DHandle,
+  type CardState,
+} from '@/3d'
+import { cardRules } from '@/cards/sceneCardRules'
 
 // ---- 状态 ----
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(true)
 const statusText = ref('加载场景...')
 const error = ref('')
-
-let app: App3D | null = null
-let controls: ReturnType<typeof createOrbitControls> | null = null
-let frameId = 0
+const cardStates = ref<CardState[]>([])
+let handle: Scene3DHandle | null = null
 
 // ---- 生命周期 ----
 onMounted(async () => {
   const canvas = canvasRef.value
   if (!canvas) {
     error.value = 'Canvas 不存在'
+    loading.value = false
     return
   }
 
   try {
-    // 1. 创建 3D 引擎
-    app = new App3D({
-      canvas,
-      enableShadows: true,
-      antialias: true,
+    // 数据由业务方请求（这里用包提供的可选工具 loadLiveDataConfig；
+    // 生产环境换成你自己的接口即可）
+    const data = await loadLiveDataConfig()
+
+    handle = createScene3D(canvas, data, {
+      cardRules,
+      controls: {
+        // 本场景是正交相机（见 live-data.json），minDistance/maxDistance 对正交无效，
+        // 只有 maxPolarAngle 起作用：防止轨道旋到地面以下。要限制缩放请用 minZoom/maxZoom。
+        maxPolarAngle: Math.PI / 2.3,
+      },
     })
-
-    // 2. 加载 live-data 配置
-    const config = await loadLiveDataConfig()
-
-    // 3. 应用到场景
-    applyLiveDataToApp(app, config, {
-      viewSize: { width: canvas.clientWidth, height: canvas.clientHeight },
+    handle.onCardState((states) => {
+      cardStates.value = states
     })
-
-    // 4. IBL 环境光 (PMREM) — physical 材质必需
-    const pmrem = new THREE.PMREMGenerator(app.renderer)
-    app.scene.environment = pmrem.fromScene(
-      new RoomEnvironment(),
-      0.04,
-    ).texture
-    pmrem.dispose()
-
-    // 5. OrbitControls
-    controls = createOrbitControls(app.camera, app.canvas, {
-      minDistance: 5,
-      maxDistance: 150,
-      maxPolarAngle: Math.PI / 2.3,
-    })
-
-    // 6. 渲染循环
-    const animate = () => {
-      frameId = requestAnimationFrame(animate)
-      controls?.update()
-      if (app) {
-        app.renderer.render(app.scene, app.camera)
-      }
-    }
-    animate()
-
     loading.value = false
     statusText.value = ''
+
+    // 便于在控制台手动验证增量更新（demo 用，可删）：
+    //   scene3d.update({ objects: { remove: ['tree01_trunk'] } })
+    //   scene3d.update({ objects: { upsert: [{ id:'marker01', parentId:'sceneRoot', type:'mesh',
+    //     geometry:{type:'sphere',params:{radius:1}}, material:{type:'standard',color:'#ff0'},
+    //     position:[0,5,0] }] } })
+    ;(window as unknown as { scene3d?: Scene3DHandle }).scene3d = handle
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('[Live Data] 加载失败:', msg)
+    console.error('[Scene3D] 加载失败:', msg)
     error.value = `场景加载失败: ${msg}`
     loading.value = false
   }
 })
 
 onUnmounted(() => {
-  if (frameId) {
-    cancelAnimationFrame(frameId)
-    frameId = 0
-  }
-  controls?.dispose()
-  controls = null
-  app?.dispose()
-  app = null
+  handle?.dispose()
+  handle = null
 })
 </script>
 

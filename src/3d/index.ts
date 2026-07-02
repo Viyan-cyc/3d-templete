@@ -2,26 +2,24 @@
  * ============================================================
  *  src/3d/index.ts — 3D 模块统一入口
  *
- *  对外暴露:
- *  1. initScene(canvas, data?)     — 初始化 3D 场景 + 卡片系统
- *  2. ComponentRegistry            — 注册自定义 3D 组件
- *  3. cardManager                  — 卡片管理器（控制显隐/类型/状态）
+ *  【主入口】createScene3D(canvas, { data, cardRules })
+ *    业务方传 live-data JSON + 卡片命名扫描规则即可驱动整个场景。
+ *    引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
+ *    CSS2D 卡片层 / resize / dispose 全部内置，业务方无需感知 3D 实现。
  *
- *  业务开发示例 (Scene3D.vue):
- *
+ *  业务方典型用法（Scene3D.vue）：
  *  ```ts
- *  import { initScene } from '@/3d'
+ *  import { createScene3D, CardHost, cardComponentRegistry } from '@/3d'
+ *  import { cardRules } from '@/cards/sceneCardRules'
  *
- *  const resp = await fetch('/api/scene/data')
- *  const { app, cardManager, dispose } = initScene(canvas, resp.data)
- *
- *  // 卡片状态传给 CardHost
- *  cardManager.onStateChange((cards) => { cardStates.value = cards })
- *
- *  // 场景切换: cardManager.freeze() / cardManager.unfreeze()
- *
- *  onUnmounted(() => dispose())
+ *  // cardRules 每条已声明 type + component + 扫描规则，组件会自动注册，无需手动 register
+ *  const handle = await createScene3D(canvas, { cardRules })
+ *  handle.onCardState((states) => { cardStates.value = states })
+ *  onUnmounted(() => handle.dispose())
  *  ```
+ *
+ *  【次选路径】initScene() —— SceneData + 内置 Shelf/Solar 组件，
+ *  降级保留，新场景建议用上面的 createScene3D。
  * ============================================================
  */
 
@@ -30,19 +28,68 @@ import { MainScene } from './scenes/MainScene'
 import { CardManager } from './cards/CardManager'
 import type { SceneData } from './types'
 
+// ============================================================
+// 主入口（live-data 驱动）
+// ============================================================
+
+export { createScene3D } from './createScene3D'
+export type {
+  Scene3DOptions,
+  Scene3DHandle,
+  SceneUpdatePatch,
+  OrbitControlsInstance,
+} from './createScene3D'
+
+// ---- 卡片系统（业务方注册 Vue 卡片组件 + 提供扫描规则）----
+export { CardHost, cardComponentRegistry } from './cards'
+export { scanAndRegisterCards } from './utils/sceneCards'
+export type {
+  CardScanRule,
+  CardScanGroup,
+  CardAnchorSpec,
+} from './utils/sceneCards'
+export type { CardState, CardDef } from './cards'
+
+// ---- live-data 数据格式（正统数据结构）----
+export { loadLiveDataConfig, applyLiveDataToApp } from './utils/liveDataLoader'
+export type {
+  LiveDataConfig,
+  LiveDataCamera,
+  LiveDataLight,
+  LiveDataObject,
+  LiveDataGeometry,
+  LiveDataMaterial,
+  ApplyLiveDataOptions,
+} from './utils/liveDataLoader'
+
+// ============================================================
+// 次选路径：SceneData + 内置组件（降级保留）
+// ============================================================
+
+export { App3D } from './App3D'
+export { MainScene } from './scenes/MainScene'
+export { CardManager } from './cards'
+export { ComponentRegistry } from './components'
+export { Shelf, SolarPanel } from './components'
+export { AssetLoader, getAssetLoader } from './loaders/AssetLoader'
+export type { App3DOptions } from './App3D'
+export type { MainSceneOptions } from './scenes/MainScene'
+export type { ShelfOptions, ShelfCellCoord, SolarPanelOptions } from './components'
+export type { SceneData, SceneConfig, ModelDef, LightDef } from './types'
+
 export interface SceneAPI {
   app: App3D
   mainScene: MainScene
-  /** 卡片管理器 */
   cardManager: CardManager
   dispose: () => void
 }
 
 /**
- * 初始化 3D 场景
+ * 初始化 SceneData 驱动的 3D 场景（次选路径，配 MainScene + 内置组件）。
+ * 新场景建议用 createScene3D。
  *
  * @param canvas    调用方 Vue 组件的 <canvas ref>
- * @param data      场景数据（JSON 解析结果），留空则显示默认 demo
+ * @param data      SceneData（JSON 解析结果），留空则显示默认 demo
  * @param container 卡片 CSS2D 层的挂载容器（默认取 canvas 的父节点）
  * @param debug     是否显示调试辅助，默认 true
  */
@@ -52,7 +99,6 @@ export function initScene(
   container?: HTMLElement,
   debug: boolean = true,
 ): SceneAPI {
-  // 1. 3D 引擎
   const app = new App3D({
     canvas,
     config: data?.config,
@@ -60,23 +106,19 @@ export function initScene(
     antialias: true,
   })
 
-  // 2. 卡片管理器（CSS2D）
   const cardManager = new CardManager()
   const cssContainer = container ?? canvas.parentElement ?? document.body
   cardManager.attach(cssContainer, app.camera, canvas)
 
-  // 后渲染 CSS2D 层
   app.addPostRenderCallback(() => {
     cardManager.render(app.scene, app.camera)
   })
 
-  // resize 同步
   const resizeObserver = new ResizeObserver(() => {
     cardManager.resize(cssContainer.clientWidth, cssContainer.clientHeight)
   })
   resizeObserver.observe(cssContainer)
 
-  // 3. 场景
   const mainScene = new MainScene({ app, data, cardManager, debug })
 
   app.addUpdateCallback(() => mainScene.update())
@@ -94,34 +136,3 @@ export function initScene(
     },
   }
 }
-
-// ---- live-data 加载器 ----
-export {
-  loadLiveDataConfig,
-  applyLiveDataToApp,
-} from './utils/liveDataLoader'
-export type {
-  LiveDataConfig,
-  LiveDataCamera,
-  LiveDataLight,
-  LiveDataObject,
-  LiveDataGeometry,
-  LiveDataMaterial,
-  ApplyLiveDataOptions,
-} from './utils/liveDataLoader'
-
-// ---- 导出 ----
-export { App3D } from './App3D'
-export { MainScene } from './scenes/MainScene'
-export { CardManager, CardHost, cardComponentRegistry } from './cards'
-export type { App3DOptions } from './App3D'
-export type { MainSceneOptions } from './scenes/MainScene'
-export { AssetLoader, getAssetLoader } from './loaders/AssetLoader'
-export { ComponentRegistry } from './components'
-export { Shelf, demoJsonDrivenShelf, SHELF_SCENE_DATA_EXAMPLE } from './components'
-export { SolarPanel } from './components'
-export type { ShelfOptions, ShelfCellCoord, SolarPanelOptions } from './components'
-export type { SceneData, SceneConfig, ModelDef, LightDef, CardDef } from './types'
-export type { CardState } from './cards'
-export * from './objects'
-export * from './lights'

@@ -15,7 +15,11 @@ export interface App3DOptions {
 export class App3D {
   readonly renderer: THREE.WebGLRenderer
   readonly scene: THREE.Scene
-  readonly camera: THREE.PerspectiveCamera
+  /**
+   * 当前相机。初始为透视相机；live-data 路径可能通过 setCamera() 替换为正交相机。
+   * 外部请通过 setCamera() 替换，不要直接赋值。
+   */
+  camera: THREE.Camera
 
   private _canvas: HTMLCanvasElement
   private _animationId: number = 0
@@ -25,6 +29,8 @@ export class App3D {
   private _prevTime: number = 0
   private _updateCallbacks: Array<() => void> = []
   private _postRenderCallbacks: Array<() => void> = []
+  /** 正交相机 resize 时的基准半高（max(|top|,|bottom|)），仅正交相机下使用 */
+  private _orthoHalfH: number | null = null
 
   constructor(options: App3DOptions) {
     const { canvas, config = {}, enableShadows = true, antialias = true } = options
@@ -157,6 +163,19 @@ export class App3D {
     if (idx !== -1) this._postRenderCallbacks.splice(idx, 1)
   }
 
+  /**
+   * 替换当前相机（如 live-data 把透视相机换成正交相机）。
+   * 内部记录正交相机的基准半高，供 resize 时按 aspect 重算 left/right。
+   */
+  setCamera(cam: THREE.Camera): void {
+    this.camera = cam
+    if (cam instanceof THREE.OrthographicCamera) {
+      this._orthoHalfH = Math.max(Math.abs(cam.top), Math.abs(cam.bottom))
+    } else {
+      this._orthoHalfH = null
+    }
+  }
+
   private _animate(): void {
     if (!this._isRunning) return
     this._animationId = requestAnimationFrame(() => this._animate())
@@ -178,7 +197,18 @@ export class App3D {
     if (width === 0 || height === 0) return
 
     this.renderer.setSize(width, height)
-    this.camera.aspect = width / height
-    this.camera.updateProjectionMatrix()
+
+    const cam = this.camera
+    const aspect = width / Math.max(height, 1)
+    if (cam instanceof THREE.PerspectiveCamera) {
+      cam.aspect = aspect
+      cam.updateProjectionMatrix()
+    } else if (cam instanceof THREE.OrthographicCamera && this._orthoHalfH != null) {
+      // 保持垂直范围不变，按新 aspect 重算水平范围
+      const halfW = this._orthoHalfH * aspect
+      cam.left = -halfW
+      cam.right = halfW
+      cam.updateProjectionMatrix()
+    }
   }
 }

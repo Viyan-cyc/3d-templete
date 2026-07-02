@@ -6,7 +6,8 @@
     业务开发只需关注自己的卡片组件怎么写，不需要了解 CSS2D 定位原理。
 
     使用方式：
-    <CardHost :cards="cards" :registry="cardRegistry" />
+    <CardHost :cards="cards" />
+    （registry 默认用全局 cardComponentRegistry，除非你需要独立注册表）
   -->
   <template v-for="card in cards" :key="card.id">
     <Teleport :to="card.domElement" v-if="card.domElement">
@@ -26,17 +27,21 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import type { CardState } from './types'
+import { cardComponentRegistry } from './CardRegistry'
 
 export interface CardRegistry {
   get(type: string): Component | undefined
 }
 
-const props = defineProps<{
-  /** 卡片状态列表，由 CardManager.onStateChange 提供 */
-  cards: CardState[]
-  /** 卡片类型 → Vue 组件 的注册表 */
-  registry: CardRegistry
-}>()
+const props = withDefaults(
+  defineProps<{
+    /** 卡片状态列表，由 CardManager.onStateChange 提供 */
+    cards: CardState[]
+    /** 卡片类型 → Vue 组件 的注册表，默认用全局 cardComponentRegistry */
+    registry?: CardRegistry
+  }>(),
+  { registry: () => cardComponentRegistry },
+)
 
 function getCardComponent(type: string): Component | undefined {
   return props.registry.get(type)

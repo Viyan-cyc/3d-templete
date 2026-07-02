@@ -7,8 +7,7 @@
  * ============================================================
  */
 
-import type { SceneData } from '@/3d/types'
-import type { LiveDataConfig } from '@/3d/utils/liveDataLoader'
+import type { SceneData, LiveDataConfig } from '@/3d'
 
 /** 场景数据 API 响应 */
 export interface SceneDataResponse {

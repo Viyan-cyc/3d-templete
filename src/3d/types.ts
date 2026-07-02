@@ -7,6 +7,8 @@
  * ============================================================
  */
 
+import type { Object3D } from 'three'
+
 // ---- 场景配置 ----
 
 export interface SceneConfig {
@@ -96,6 +98,11 @@ export interface CardDef {
   interactiveGroup?: string
   /** 物体上方偏移 [x, y, z]，默认 [0, 1.5, 0] */
   offset?: [number, number, number]
+  /**
+   * 卡片定位锚点（运行时注入，非 JSON 序列化字段）。
+   * CSS2D 层挂在其上、跟随其世界坐标。默认取 addCard 传入的 targets[0]。
+   */
+  anchor?: Object3D
   /** 透传给 Vue 卡片组件的业务数据 */
   props?: Record<string, unknown>
 }
