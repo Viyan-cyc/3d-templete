@@ -6,16 +6,37 @@
  *
  * 支持：
  *  - 摄像机：perspective / orthographic
- *  - 几何体：box / plane / sphere / cylinder / cone / torus / circle / ring
+ *  - 几何体：box / plane / sphere / cylinder / cone / torus / circle / ring / text
  *  - 材质：standard / phong / basic / physical（含 transmission / ior）
  *  - 灯光：ambient / hemisphere / directional（含阴影）
  *  - 对象层级树：group / mesh / light，通过 parentId 建立父子关系
  */
 
 import * as THREE from 'three'
+import { FontLoader, type Font } from 'three/examples/jsm/loaders/FontLoader.js'
+import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import type { App3D } from '../App3D'
 
 const DEG2RAD = Math.PI / 180
+
+// text 几何用的字体缓存（懒加载）：仅 ASCII 文字需要；中文等非 ASCII 走 canvas 贴图，不依赖字体
+// 本地字体（npm three 包不含 examples/fonts，故自托管到 public/fonts）
+const FONT_URL = '/fonts/helvetiker_regular.typeface.json'
+let fontCache: Font | null = null
+let fontPromise: Promise<unknown> | undefined
+
+/** 预加载字体（text 几何用）。在 applyLiveDataToApp 前调用，ASCII 文字才能渲染成立体字形。 */
+export async function ensureFont(): Promise<void> {
+  if (fontCache || fontPromise) return
+  const loader = new FontLoader()
+  fontPromise = loader
+    .loadAsync(FONT_URL)
+    .then((f) => {
+      fontCache = f as Font
+    })
+    .catch(() => null)
+  await fontPromise
+}
 
 // ══════════════════════════════════════════════════════════════
 // 类型定义
@@ -88,7 +109,7 @@ export interface LiveDataObject {
 
 export interface LiveDataGeometry {
   type: string
-  params?: Record<string, number>
+  params?: Record<string, number | string>
 }
 
 export interface LiveDataMaterial {
@@ -264,6 +285,11 @@ function createLiveMesh(cfg: LiveDataObject): THREE.Mesh | null {
   const geoDef = cfg.geometry
   if (!geoDef) return null
 
+  // text 几何特殊处理：ASCII 用 TextGeometry(立体)，非 ASCII（中文等）用 canvas 贴图
+  if (geoDef.type === 'text') {
+    return createLiveTextMesh(cfg)
+  }
+
   const geo = createLiveGeometry(geoDef)
   if (!geo) return null
 
@@ -281,12 +307,72 @@ function createLiveMesh(cfg: LiveDataObject): THREE.Mesh | null {
   return mesh
 }
 
+/**
+ * 创建文字 mesh。
+ * - ASCII 文字：TextGeometry 立体字（需 ensureFont 已加载字体）
+ * - 非 ASCII（中文等）：canvas 绘制文字 → CanvasTexture 贴到 PlaneGeometry
+ *   （helvetiker 字体不含中文，故中文一律走贴图）
+ */
+function createLiveTextMesh(cfg: LiveDataObject): THREE.Mesh | null {
+  const tp = (cfg.geometry?.params ?? {}) as Record<string, unknown>
+  const text = String(tp.text ?? 'Text')
+  const size = Number(tp.size) > 0 ? Number(tp.size) : 1
+  const isAscii = /^[\x00-\x7F]*$/.test(text)
+
+  let geo: THREE.BufferGeometry
+  let mat: THREE.Material
+
+  if (isAscii && fontCache) {
+    geo = new TextGeometry(text, {
+      font: fontCache,
+      size,
+      depth: Number(tp.depth) > 0 ? Number(tp.depth) : 0.2,
+      curveSegments: 6,
+      bevelEnabled: false,
+    })
+    mat = createLiveMaterial(cfg.material)
+  } else {
+    // 中文等：canvas 贴图
+    const cv = document.createElement('canvas')
+    const ctx = cv.getContext('2d')!
+    const fs = 128
+    ctx.font = `bold ${fs}px sans-serif`
+    const m = ctx.measureText(text)
+    cv.width = Math.ceil(m.width) + 32
+    cv.height = fs + 32
+    // canvas 尺寸变更后需重新设置 font
+    ctx.font = `bold ${fs}px sans-serif`
+    ctx.fillStyle = '#ffffff'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(text, cv.width / 2, cv.height / 2)
+
+    const tex = new THREE.CanvasTexture(cv)
+    tex.colorSpace = THREE.SRGBColorSpace
+    geo = new THREE.PlaneGeometry(size * (cv.width / cv.height), size)
+    const matColor = cfg.material?.color ?? '#ffffff'
+    mat = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      color: new THREE.Color(matColor),
+      side: THREE.DoubleSide,
+    })
+  }
+
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.name = cfg.id
+  applyTransform(mesh, cfg)
+  if (cfg.castShadow) mesh.castShadow = true
+  if (cfg.receiveShadow) mesh.receiveShadow = true
+  return mesh
+}
+
 // ── 几何体工厂 ──
 
 export function createLiveGeometry(
   geoDef: LiveDataGeometry,
 ): THREE.BufferGeometry | null {
-  const p = geoDef.params ?? {}
+  const p = (geoDef.params ?? {}) as Record<string, number>
 
   switch (geoDef.type) {
     case 'box':
