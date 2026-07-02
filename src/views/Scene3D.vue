@@ -16,7 +16,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { App3D, loadLiveDataConfig, applyLiveDataToApp } from '@/3d'
+import { App3D, loadLiveDataConfig, applyLiveDataToApp, ensureFont } from '@/3d'
+import type { LiveDataObject } from '@/3d'
 import { createOrbitControls } from '@/3d/controls/OrbitControls'
 
 // ---- 状态 ----
@@ -47,6 +48,11 @@ onMounted(async () => {
 
     // 2. 加载 live-data 配置
     const config = await loadLiveDataConfig()
+
+    // 2.1 若含文字标签，预加载字体（ASCII 立体字需要；中文走 canvas 贴图，不依赖字体）
+    if (config.objects?.some((o: LiveDataObject) => o.geometry?.type === 'text')) {
+      await ensureFont()
+    }
 
     // 3. 应用到场景
     applyLiveDataToApp(app, config, {

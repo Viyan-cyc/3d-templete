@@ -99,6 +99,7 @@ export function initScene(
 export {
   loadLiveDataConfig,
   applyLiveDataToApp,
+  ensureFont,
 } from './utils/liveDataLoader'
 export type {
   LiveDataConfig,
