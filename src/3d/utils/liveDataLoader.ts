@@ -16,6 +16,12 @@ import * as THREE from 'three'
 import { FontLoader, type Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import type { App3D } from '../App3D'
+import { ComponentRegistry, AssetPool, registerAllBuilders } from '../components'
+
+// 全局组件注册表 + 资源缓存池（组件复用 Geometry/Material，相同参数只创建一次）
+// ComponentRegistry 是单例实例（非类），registerAllBuilders() 已向其注册所有 builder
+registerAllBuilders()
+const assetPool = new AssetPool()
 
 const DEG2RAD = Math.PI / 180
 
@@ -96,15 +102,21 @@ export interface LiveDataLight {
 
 export interface LiveDataObject {
   id: string
-  type: 'group' | 'mesh'
+  type: 'group' | 'mesh' | 'component'
   parentId: string | null
   position?: number[]
   rotation?: number[]
   scale?: number[]
   geometry?: LiveDataGeometry
   material?: LiveDataMaterial
+  component?: LiveDataComponent
   castShadow?: boolean
   receiveShadow?: boolean
+}
+
+export interface LiveDataComponent {
+  type: string
+  params?: Record<string, number | string>
 }
 
 export interface LiveDataGeometry {
@@ -147,7 +159,9 @@ export async function loadLiveDataConfig(
 
   const res = await fetch(url)
   if (!res.ok) throw new Error(`场景配置加载失败: ${res.status} ${url}`)
-  return res.json()
+  const config = await res.json()
+  console.dir(config, { depth: null })
+  return config
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -234,7 +248,17 @@ export function applyLiveDataToApp(
     // 第一遍：创建
     for (const oc of config.objects) {
       const node = createLiveObject3D(oc)
-      if (node) nodeMap.set(oc.id, node)
+      if (node) {
+        nodeMap.set(oc.id, node)
+        // 组件节点:把展开的子节点也注册进 nodeMap,供其他物体的 parentId 引用
+        if (oc.type === 'component') {
+          node.traverse((child) => {
+            if (child.userData?.id && child !== node) {
+              nodeMap.set(child.userData.id, child)
+            }
+          })
+        }
+      }
     }
 
     // 第二遍：挂载父节点
@@ -274,9 +298,36 @@ export function createLiveObject3D(
     case 'mesh':
       obj = createLiveMesh(cfg)
       break
+    case 'component':
+      obj = createLiveComponent(cfg)
+      break
   }
 
   return obj
+}
+
+// ── Component 工厂 ──
+
+function createLiveComponent(cfg: LiveDataObject): THREE.Object3D | null {
+  const compDef = cfg.component
+  if (!compDef) return null
+
+  const compType = compDef.type
+  const compParams = (compDef.params ?? {}) as Record<string, number | string>
+  const mat = createLiveMaterial(cfg.material)
+
+  const group = ComponentRegistry.createByBuilder(compType, compParams, mat, assetPool)
+  if (!group) return null
+
+  // 给子节点设置 userData.id，供 parentId 引用 + raycaster 识别
+  const prefix = cfg.id
+  for (const child of group.children) {
+    child.userData.id = `${prefix}_${child.name}`
+  }
+
+  group.name = cfg.id
+  applyTransform(group, cfg)
+  return group
 }
 
 // ── Mesh 工厂 ──
@@ -426,13 +477,31 @@ export function createLiveGeometry(
   }
 }
 
-// ── 材质工厂 ──
+// ── 材质工厂（带 AssetPool 缓存） ──
+
+/** 根据材质参数生成缓存 key */
+function materialKey(matDef: LiveDataMaterial): string {
+  const parts = [matDef.type, matDef.color ?? '#fff', String(matDef.roughness ?? ''), String(matDef.metalness ?? '')]
+  if (matDef.transmission !== undefined) parts.push(`tm:${matDef.transmission}`)
+  if (matDef.clearcoat !== undefined) parts.push(`cc:${matDef.clearcoat}`)
+  if (matDef.ior !== undefined) parts.push(`ior:${matDef.ior}`)
+  if (matDef.transparent) parts.push('tr')
+  if (matDef.opacity !== undefined) parts.push(`op:${matDef.opacity}`)
+  return parts.join('|')
+}
 
 export function createLiveMaterial(
   matDef?: LiveDataMaterial,
 ): THREE.Material {
   if (!matDef) return new THREE.MeshNormalMaterial()
 
+  // 缓存：相同参数共享同一个 Material 实例
+  const key = materialKey(matDef)
+  return assetPool.getMaterial(key, () => createLiveMaterialInner(matDef))
+}
+
+/** 实际创建材质（仅缓存未命中时调用） */
+function createLiveMaterialInner(matDef: LiveDataMaterial): THREE.Material {
   const type = matDef.type
   let mat: THREE.Material
 
