@@ -3030,5 +3030,14 @@
     "position": [-28, 8.3, 8],
     "castShadow": true,
     "receiveShadow": true
+  }, {
+    "id": "windmill",
+    "parentId": "sceneRoot",
+    "type": "glb",
+    "src": "asset:windmill",
+    "position": [25, 0, 25],
+    "scale": [5, 5, 5],
+    "castShadow": true,
+    "receiveShadow": true
   }]
 }

@@ -26,6 +26,7 @@ import { createOrbitControls } from './controls/OrbitControls'
 import { createGridHelper, createAxesHelper } from './objects'
 import {
   applyLiveDataToApp,
+  loadGlbObjects,
   type LiveDataConfig,
   type LiveDataObject,
 } from './utils/liveDataLoader'
@@ -91,13 +92,14 @@ export type OrbitControlsInstance = ReturnType<typeof createOrbitControls>
  * @param options 其它选项（卡片规则、控制器、调试等）
  *
  * 内部顺序（关键）：数据应用 → 替换相机 → 再创建控制器与卡片层，
- * 确保它们绑定的是最终相机（正交/透视）。同步返回，无内部请求。
+ * 确保它们绑定的是最终相机（正交/透视）。
+ * GLB 模型异步加载，在同步场景构建完成后自动填充到占位节点。
  */
-export function createScene3D(
+export async function createScene3D(
   canvas: HTMLCanvasElement,
   data: LiveDataConfig,
   options: Scene3DOptions = {},
-): Scene3DHandle {
+): Promise<Scene3DHandle> {
   const { cardRules, debug = false, controls: controlsOpts, enableShadows = true } = options
   const container = options.container ?? canvas.parentElement ?? document.body
 
@@ -140,6 +142,12 @@ export function createScene3D(
     cardManager.resize(container.clientWidth, container.clientHeight)
   })
   resizeObserver.observe(container)
+
+  // 10. 异步加载 GLB 模型（占位节点已在 applyLiveDataToApp 中创建）
+  //     渲染循环已启动，模型加载完成后自动出现在场景中
+  loadGlbObjects(app.scene, objectIndex, data.objects).catch((err) => {
+    console.error('[createScene3D] GLB 模型加载失败:', err)
+  })
 
   let disposed = false
 

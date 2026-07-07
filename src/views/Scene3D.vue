@@ -46,7 +46,7 @@ onMounted(async () => {
     // 生产环境换成你自己的接口即可）
     const data = await loadLiveDataConfig()
 
-    handle = createScene3D(canvas, data, {
+    handle = await createScene3D(canvas, data, {
       cardRules,
       controls: {
         // 本场景是正交相机（见 live-data.json），minDistance/maxDistance 对正交无效，

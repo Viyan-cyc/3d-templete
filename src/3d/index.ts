@@ -51,7 +51,7 @@ export type {
 export type { CardState, CardDef } from './cards'
 
 // ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp } from './utils/liveDataLoader'
+export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects } from './utils/liveDataLoader'
 export type {
   LiveDataConfig,
   LiveDataCamera,
