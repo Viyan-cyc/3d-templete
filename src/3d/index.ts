@@ -67,12 +67,14 @@ export type {
 // ============================================================
 
 export { App3D } from './App3D'
+export { DebugOverlay } from './debug'
 export { MainScene } from './scenes/MainScene'
 export { CardManager } from './cards'
 export { ComponentRegistry } from './components'
 export { Shelf, SolarPanel } from './components'
 export { AssetLoader, getAssetLoader } from './loaders/AssetLoader'
 export type { App3DOptions } from './App3D'
+export type { DebugOverlayOptions } from './debug'
 export type { MainSceneOptions } from './scenes/MainScene'
 export type { ShelfOptions, ShelfCellCoord, SolarPanelOptions } from './components'
 export type { SceneData, SceneConfig, ModelDef, LightDef } from './types'

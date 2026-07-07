@@ -1,11 +1,14 @@
 import * as THREE from 'three'
 import type { SceneConfig } from './types'
+import { DebugOverlay } from './debug'
 
 export interface App3DOptions {
   canvas: HTMLCanvasElement
   config?: SceneConfig
   enableShadows?: boolean
   antialias?: boolean
+  /** 调试模式：true 显示 HUD 面板（calls、triangles、FPS 等）；false 关闭 */
+  debug?: boolean
 }
 
 /**
@@ -31,17 +34,25 @@ export class App3D {
   private _postRenderCallbacks: Array<() => void> = []
   /** 正交相机 resize 时的基准半高（max(|top|,|bottom|)），仅正交相机下使用 */
   private _orthoHalfH: number | null = null
+  /** 调试模式开关 */
+  private _debug: boolean = false
+  /** 调试 HUD 面板 */
+  private _debugOverlay: DebugOverlay | null = null
+  /** 上一帧时间戳（用于计算 delta） */
+  private _lastFrameTime: number = 0
 
   constructor(options: App3DOptions) {
-    const { canvas, config = {}, enableShadows = true, antialias = true } = options
+    const { canvas, config = {}, enableShadows = true, antialias = true, debug = false } = options
 
     this._canvas = canvas
+    this._debug = debug
     this._startTime = performance.now()
     this._prevTime = this._startTime
+    this._lastFrameTime = this._startTime
 
     // ---- Renderer ----
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1))
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight)
     this.renderer.shadowMap.enabled = enableShadows
     this.renderer.shadowMap.type = THREE.PCFShadowMap
@@ -78,6 +89,11 @@ export class App3D {
     } else {
       this.camera.lookAt(0, 0, 0)
     }
+
+    // ---- Debug ----
+    if (debug) {
+      this._debugOverlay = new DebugOverlay()
+    }
   }
 
   /** 启动渲染循环 */
@@ -107,6 +123,8 @@ export class App3D {
   /** 销毁，释放 GPU 资源 */
   dispose(): void {
     this.stop()
+    this._debugOverlay?.dispose()
+    this._debugOverlay = null
     this.renderer.dispose()
     this.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
@@ -176,6 +194,25 @@ export class App3D {
     }
   }
 
+  /** 设置调试模式（运行时切换） */
+  setDebug(mode: boolean): void {
+    this._debug = mode
+    if (mode) {
+      if (!this._debugOverlay) {
+        this._debugOverlay = new DebugOverlay()
+      } else {
+        this._debugOverlay.show()
+      }
+    } else {
+      this._debugOverlay?.hide()
+    }
+  }
+
+  /** 获取当前调试模式 */
+  get debug(): boolean {
+    return this._debug
+  }
+
   private _animate(): void {
     if (!this._isRunning) return
     this._animationId = requestAnimationFrame(() => this._animate())
@@ -185,6 +222,14 @@ export class App3D {
     }
 
     this.renderer.render(this.scene, this.camera)
+
+    // Debug: 更新 HUD 面板
+    if (this._debug && this._debugOverlay) {
+      const now = performance.now()
+      const deltaMs = now - this._lastFrameTime
+      this._lastFrameTime = now
+      this._debugOverlay.update(this.renderer.info, deltaMs)
+    }
 
     for (const fn of this._postRenderCallbacks) {
       fn()

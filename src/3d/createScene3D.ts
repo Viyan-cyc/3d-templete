@@ -14,6 +14,10 @@
  *
  *  引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
  *  CSS2D 卡片层 / resize / dispose 全部在这里封装，业务方无需感知。
+ *
+ *  Debug 模式：
+ *    URL 添加 ?debug=true 开启 HUD 面板（calls、triangles、FPS 等）
+ *    也可通过 handle.setDebug() 运行时切换
  * ============================================================
  */
 
@@ -23,7 +27,6 @@ import { App3D } from './App3D'
 import { CardManager } from './cards/CardManager'
 import type { CardStateCallback } from './cards/CardManager'
 import { createOrbitControls } from './controls/OrbitControls'
-import { createGridHelper, createAxesHelper } from './objects'
 import {
   applyLiveDataToApp,
   loadGlbObjects,
@@ -50,7 +53,13 @@ export interface Scene3DOptions {
   cardRules?: CardScanRule[]
   /** 卡片 CSS2D 层挂载容器，默认 canvas.parentElement */
   container?: HTMLElement
-  /** 是否显示 grid/axes 调试辅助，默认 false */
+  /**
+   * 调试模式：
+   * - false（默认）：关闭
+   * - true：显示 HUD 面板（calls、triangles、FPS 等）
+   *
+   * 也可通过 URL 参数 ?debug=true 开启，URL 参数优先级更高
+   */
   debug?: boolean
   /** OrbitControls 配置 */
   controls?: Scene3DControlsOptions
@@ -77,12 +86,22 @@ export interface Scene3DHandle {
   onCardState(cb: CardStateCallback): () => void
   /** 物体级增量更新（按 id 增删改），自动同步受影响的卡片 */
   update(patch: SceneUpdatePatch): void
+  /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
+  setDebug(mode: boolean): void
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
 
 /** OrbitControls 实例类型（便于外部声明变量类型时引用） */
 export type OrbitControlsInstance = ReturnType<typeof createOrbitControls>
+
+/** 从 URL 查询参数读取 debug 开关 */
+function readDebugFromURL(): boolean {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  const val = params.get('debug')
+  return val === 'true' || val === '1'
+}
 
 /**
  * 初始化一个完整的 live-data 驱动 3D 场景。
@@ -100,11 +119,14 @@ export async function createScene3D(
   data: LiveDataConfig,
   options: Scene3DOptions = {},
 ): Promise<Scene3DHandle> {
-  const { cardRules, debug = false, controls: controlsOpts, enableShadows = true } = options
+  const { cardRules, controls: controlsOpts, enableShadows = true } = options
   const container = options.container ?? canvas.parentElement ?? document.body
 
+  // URL 参数优先于 options.debug
+  const debug = readDebugFromURL() || options.debug || false
+
   // 1. 3D 引擎
-  const app = new App3D({ canvas, enableShadows, antialias: true })
+  const app = new App3D({ canvas, enableShadows, antialias: true, debug })
 
   // 2. 应用数据（内部 app.setCamera 替换相机），拿到 id→Object3D 索引供 update 用
   const width = canvas.clientWidth || container.clientWidth || 1
@@ -126,24 +148,18 @@ export async function createScene3D(
   // 6. 按业务规则扫描场景、注册卡片
   scanAndRegisterCards(app.scene, cardManager, cardRules ?? [])
 
-  // 7. 调试辅助
-  if (debug) {
-    app.scene.add(createGridHelper())
-    app.scene.add(createAxesHelper(5))
-  }
-
-  // 8. 接入 App3D 自有渲染循环（update → WebGL render → CSS2D post-render）
+  // 7. 接入 App3D 自有渲染循环（update → WebGL render → CSS2D post-render）
   app.addUpdateCallback(() => controls.update())
   app.addPostRenderCallback(() => cardManager.render(app.scene, app.camera))
   app.start() // App3D 内部接管 RAF + window resize（含相机 aspect/正交重算）
 
-  // 9. CSS2D 层尺寸随容器变化（App3D 只管 WebGL canvas 与相机）
+  // 8. CSS2D 层尺寸随容器变化（App3D 只管 WebGL canvas 与相机）
   const resizeObserver = new ResizeObserver(() => {
     cardManager.resize(container.clientWidth, container.clientHeight)
   })
   resizeObserver.observe(container)
 
-  // 10. 异步加载 GLB 模型（占位节点已在 applyLiveDataToApp 中创建）
+  // 9. 异步加载 GLB 模型（占位节点已在 applyLiveDataToApp 中创建）
   //     渲染循环已启动，模型加载完成后自动出现在场景中
   loadGlbObjects(app.scene, objectIndex, data.objects).catch((err) => {
     console.error('[createScene3D] GLB 模型加载失败:', err)
@@ -165,6 +181,9 @@ export async function createScene3D(
         changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert))
       }
       refreshCards(app.scene, cardManager, cardRules ?? [], changed)
+    },
+    setDebug(mode: boolean): void {
+      app.setDebug(mode)
     },
     dispose(): void {
       if (disposed) return
