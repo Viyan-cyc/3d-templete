@@ -78,7 +78,7 @@ export interface ModelDef {
  */
 export interface CardDef {
   /**
-   * 卡片类型 —— 决定用哪个 Vue 卡片组件渲染。
+   * 卡片类型 —— 决定用哪个 React 卡片组件渲染。
    * 与 CardRegistry 中注册的类型名对应，如 'agv'、'container'。
    * 不填则回退到 ModelDef.componentName → ModelDef.type。
    */
@@ -103,7 +103,7 @@ export interface CardDef {
    * CSS2D 层挂在其上、跟随其世界坐标。默认取 addCard 传入的 targets[0]。
    */
   anchor?: Object3D
-  /** 透传给 Vue 卡片组件的业务数据 */
+  /** 透传给 React 卡片组件的业务数据 */
   props?: Record<string, unknown>
 }
 

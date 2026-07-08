@@ -376,7 +376,7 @@ function createLiveGlbPlaceholder(cfg: LiveDataObject): THREE.Group {
  * @returns 加载完成的 GLB 对象 id → Object3D 映射
  */
 export async function loadGlbObjects(
-  scene: THREE.Scene,
+  _scene: THREE.Scene,
   nodeMap: Map<string, THREE.Object3D>,
   objects?: LiveDataObject[],
 ): Promise<Map<string, THREE.Object3D>> {

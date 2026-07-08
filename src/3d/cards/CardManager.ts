@@ -25,7 +25,7 @@ export type CardStateCallback = (cards: CardState[]) => void
  *  - 为绑定了 CardDef 的 3D 物体创建 CSS2DObject（DOM 定位层）
  *  - 管理卡片的显示/隐藏（单个、按类型、全部）
  *  - 处理 click 交互模式（同组互斥显示）
- *  - 暴露 CardState[] 供 Vue 通过 Teleport 渲染卡片内容
+ *  - 暴露 CardState[] 供 React 通过 Portal 渲染卡片内容
  *  - 场景切换时整体隐藏/恢复
  *  - 销毁时清理 DOM
  * ============================================================

@@ -3,7 +3,7 @@
  *  scanCards — 通用「按命名规则批量注册卡片」扫描器
  *
  *  包内不写死任何业务对象（不再有 tree/building）。业务方通过
- *  CardScanRule[] 描述：哪些 mesh 属于同一组、卡片类型、用哪个 Vue
+ *  CardScanRule[] 描述：哪些 mesh 属于同一组、卡片类型、用哪个 React
  *  组件、锚点怎么取、传什么 props。扫描器负责分组 + 自动注册组件
  *  + 调 cardManager.addCard。
  *
@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three'
-import type { Component } from 'vue'
+import type { ComponentType } from 'react'
 import { cardComponentRegistry } from '../cards/CardRegistry'
 import type { CardManager } from '../cards/CardManager'
 import type { CardDef } from '../types'
@@ -27,10 +27,10 @@ export type CardAnchorSpec =
   | ((meshes: THREE.Object3D[]) => THREE.Object3D) // 完全自定义
 
 export interface CardScanRule {
-  /** 卡片类型，对应 cardComponentRegistry 中注册的 Vue 组件 */
+  /** 卡片类型，对应 cardComponentRegistry 中注册的 React 组件 */
   type: string
-  /** 该卡片类型对应的 Vue 组件；传入即自动注册，无需再调 cardComponentRegistry.register */
-  component?: Component
+  /** 该卡片类型对应的 React 组件；传入即自动注册，无需再调 cardComponentRegistry.register */
+  component?: ComponentType<{ cardId: string; objectId: string; [key: string]: unknown }>
   /** 匹配 mesh.name；捕获组 [1] = 分组 id */
   pattern: RegExp
   /** 锚点选取，默认 'first' */
@@ -77,7 +77,7 @@ export function scanAndRegisterCards(
   if (rules.length === 0) return
 
   for (const rule of rules) {
-    // 自动注册 Vue 组件（声明式：组件随规则一起定义）
+    // 自动注册 React 组件（声明式：组件随规则一起定义）
     if (rule.component) {
       cardComponentRegistry.register(rule.type, rule.component)
     }

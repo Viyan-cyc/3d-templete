@@ -7,15 +7,15 @@
  *    引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
  *    CSS2D 卡片层 / resize / dispose 全部内置，业务方无需感知 3D 实现。
  *
- *  业务方典型用法（Scene3D.vue）：
+ *  业务方典型用法（Scene3D.tsx）：
  *  ```ts
  *  import { createScene3D, CardHost, cardComponentRegistry } from '@/3d'
  *  import { cardRules } from '@/cards/sceneCardRules'
  *
  *  // cardRules 每条已声明 type + component + 扫描规则，组件会自动注册，无需手动 register
  *  const handle = await createScene3D(canvas, { cardRules })
- *  handle.onCardState((states) => { cardStates.value = states })
- *  onUnmounted(() => handle.dispose())
+ *  handle.onCardState((states) => { setCardStates(states) })
+ *  useEffect(() => () => handle.dispose(), [])
  *  ```
  *
  *  【次选路径】initScene() —— SceneData + 内置 Shelf/Solar 组件，
@@ -40,7 +40,7 @@ export type {
   OrbitControlsInstance,
 } from './createScene3D'
 
-// ---- 卡片系统（业务方注册 Vue 卡片组件 + 提供扫描规则）----
+// ---- 卡片系统（业务方注册 React 卡片组件 + 提供扫描规则）----
 export { CardHost, cardComponentRegistry } from './cards'
 export { scanAndRegisterCards } from './utils/sceneCards'
 export type {
@@ -90,7 +90,7 @@ export interface SceneAPI {
  * 初始化 SceneData 驱动的 3D 场景（次选路径，配 MainScene + 内置组件）。
  * 新场景建议用 createScene3D。
  *
- * @param canvas    调用方 Vue 组件的 <canvas ref>
+ * @param canvas    调用方 React 组件的 <canvas ref>
  * @param data      SceneData（JSON 解析结果），留空则显示默认 demo
  * @param container 卡片 CSS2D 层的挂载容器（默认取 canvas 的父节点）
  * @param debug     是否显示调试辅助，默认 true

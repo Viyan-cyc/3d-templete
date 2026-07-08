@@ -1,6 +1,6 @@
 # 3D 场景集成指南
 
-> 本文档面向**产品开发团队**，指导如何快速将 `src/3d` 模块集成到你的 Vue 3 项目中，实现 3D 场景渲染与 2D 信息卡片交互。
+> 本文档面向**产品开发团队**，指导如何快速将 `src/3d` 模块集成到你的 React 项目中，实现 3D 场景渲染与 2D 信息卡片交互。
 
 ---
 
@@ -11,7 +11,7 @@
 │  产品方（你的代码）                                    │
 │                                                       │
 │  1. 准备场景数据 (LiveDataConfig JSON)                │
-│  2. 编写 2D 卡片组件 (Vue Component)                  │
+│  2. 编写 2D 卡片组件 (React Component)                  │
 │  3. 声明卡片扫描规则 (CardScanRule[])                 │
 │  4. 调用 createScene3D() 一行启动                     │
 │                                                       │
@@ -35,7 +35,7 @@
 
 1. 提供一个 `<canvas>` 元素
 2. 传入场景数据（`LiveDataConfig` JSON）
-3. 编写 2D 卡片 Vue 组件 + 声明扫描规则
+3. 编写 2D 卡片 React 组件 + 声明扫描规则
 4. 调用 `createScene3D()` 启动
 
 ---
@@ -50,16 +50,8 @@ npm install three
 
 ### 2.2 最小集成代码
 
-```vue
-<template>
-  <div class="scene-page">
-    <canvas ref="canvasRef" class="scene-canvas" />
-    <CardHost :cards="cardStates" />
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+```tsx
+import React, { useRef, useState, useEffect } from 'react'
 import {
   createScene3D,
   CardHost,
@@ -68,29 +60,40 @@ import {
 } from '@/3d'
 import { cardRules } from '@/cards/sceneCardRules'  // 你的卡片规则
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const cardStates = ref<CardState[]>([])
-let handle: Scene3DHandle | null = null
+const Scene3D: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [cardStates, setCardStates] = useState<CardState[]>([])
+  const handleRef = useRef<Scene3DHandle | null>(null)
 
-onMounted(async () => {
-  const canvas = canvasRef.value!
-  // 从你的接口获取场景数据
-  const data = await fetch('/api/your-scene-endpoint').then(r => r.json())
+  useEffect(() => {
+    const canvas = canvasRef.current!
+    let disposed = false;
 
-  handle = createScene3D(canvas, data, { cardRules })
-  handle.onCardState(states => { cardStates.value = states })
-})
+    (async () => {
+      // 从你的接口获取场景数据
+      const data = await fetch('/api/your-scene-endpoint').then(r => r.json())
+      const handle = await createScene3D(canvas, data, { cardRules })
+      if (disposed) { handle.dispose(); return }
+      handle.onCardState(states => setCardStates(states))
+      handleRef.current = handle
+    })()
 
-onUnmounted(() => {
-  handle?.dispose()
-  handle = null
-})
-</script>
+    return () => {
+      disposed = true
+      handleRef.current?.dispose()
+      handleRef.current = null
+    }
+  }, [])
 
-<style scoped>
-.scene-page { width: 100%; height: 100%; position: relative; overflow: hidden; }
-.scene-canvas { display: block; width: 100%; height: 100%; }
-</style>
+  return (
+    <div className="scene-page">
+      <canvas ref={canvasRef} className="scene-canvas" />
+      <CardHost cards={cardStates} />
+    </div>
+  )
+}
+
+export default Scene3D
 ```
 
 **就这么简单！** 3D 渲染、相机控制、卡片交互、窗口自适应全部自动处理。
@@ -322,54 +325,41 @@ onUnmounted(() => {
 
 卡片系统是 3D 场景与业务数据交互的核心。你只需要：
 
-1. **写一个 Vue 组件**（卡片长什么样你说了算）
+1. **写一个 React 组件**（卡片长什么样你说了算）
 2. **写一条扫描规则**（告诉引擎哪些物体挂卡片、传什么数据）
 
 ### 4.1 编写卡片组件
 
-卡片就是一个普通的 Vue 组件，接收引擎传入的 props：
+卡片就是一个普通的 React 组件，接收引擎传入的 props：
 
-```vue
-<!-- MyCard.vue -->
-<template>
-  <div class="my-card" @click.stop>
-    <div class="card-title">{{ label }}</div>
-    <div class="card-info">
-      <span>状态：{{ status }}</span>
-      <span>温度：{{ temperature }}°C</span>
-    </div>
-  </div>
-</template>
+```tsx
+// MyCard.tsx
+import React from 'react'
 
-<script setup lang="ts">
-defineProps<{
+interface MyCardProps {
   cardId: string       // 卡片唯一 ID（引擎自动注入）
   objectId: string     // 关联的 3D 物体 ID（引擎自动注入）
   label?: string       // 你在 props 回调中传入的业务数据
   status?: string
   temperature?: number
-}>()
-</script>
-
-<style scoped>
-.my-card {
-  min-width: 140px;
-  padding: 10px 14px;
-  background: rgba(20, 20, 40, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  color: #e0e0e0;
-  font-size: 12px;
-  backdrop-filter: blur(6px);
-  user-select: none;
-  cursor: default;
 }
-.card-title { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
-.card-info { display: flex; flex-direction: column; gap: 2px; }
-</style>
+
+const MyCard: React.FC<MyCardProps> = ({ label, status, temperature }) => {
+  return (
+    <div className="my-card" onClick={(e) => e.stopPropagation()}>
+      <div className="card-title">{label}</div>
+      <div className="card-info">
+        <span>状态：{status}</span>
+        <span>温度：{temperature}°C</span>
+      </div>
+    </div>
+  )
+}
+
+export default MyCard
 ```
 
-> ⚠️ **重要：** 卡片根元素必须加 `@click.stop`，防止点击穿透到 3D 场景。
+> ⚠️ **重要：** 卡片根元素必须加 `onClick={(e) => e.stopPropagation()}`，防止点击穿透到 3D 场景。
 
 ### 4.2 声明卡片扫描规则
 
@@ -378,7 +368,7 @@ defineProps<{
 ```ts
 // cards/sceneCardRules.ts
 import type { CardScanRule } from '@/3d'
-import MyCard from '@/components/cards/MyCard.vue'
+import MyCard from '@/components/cards/MyCard'
 
 export const cardRules: CardScanRule[] = [
   {

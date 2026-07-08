@@ -5,12 +5,12 @@
  *  业务方只需：
  *    const data = await fetch('/api/scene').then(r => r.json())  // 数据由业务方请求
  *    const handle = createScene3D(canvas, data, { cardRules })
- *    handle.onCardState(states => cardStates.value = states)
+ *    handle.onCardState(states => setCardStates(states))
  *
  *    // 之后按 id 增删改物体（移动的 AGV、变色的状态、动态增删实体…）
  *    handle.update({ objects: { upsert: [...], remove: [...] } })
  *
- *    onUnmounted(() => handle.dispose())
+ *    useEffect(() => () => handle.dispose(), [])
  *
  *  引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
  *  CSS2D 卡片层 / resize / dispose 全部在这里封装，业务方无需感知。

@@ -9,7 +9,7 @@
 - 吃一份 JSON（`LiveDataConfig`），自动搭出场景：几何体、材质、灯光、相机、阴影、环境光。
 - 之后还能**按 id 增量更新**单个物体（移动的 AGV、变色的状态、动态增删），不用重建整个场景。
 - 在指定物体上挂「信息卡片」：点击弹出、同组互斥、点空白关闭，卡片定位自动跟随 3D 物体。
-- 卡片的**样式由你写**（普通 Vue 组件），**挂在哪里由你的规则决定**。
+- 卡片的**样式由你写**（普通 React 组件），**挂在哪里由你的规则决定**。
 
 ---
 
@@ -18,9 +18,9 @@
 | 步骤 | 你交付的东西 | 放在哪 |
 |------|--------------|--------|
 | 1 | 场景数据 JSON（几何/灯光/相机） | 后端接口 或 `public/*.json` |
-| 2 | 卡片 Vue 组件（纯样式） | `src/components/cards/*.vue` |
+| 2 | 卡片 React 组件（纯样式） | `src/components/cards/*.tsx` |
 | 3 | 卡片规则 `cardRules`（物体→卡片） | `src/cards/*.ts` |
-| 4 | 一个入口页（canvas + 一行调用） | `src/views/*.vue` |
+| 4 | 一个入口页（canvas + 一行调用） | `src/views/*.tsx` |
 
 下面逐步展开。
 
@@ -32,7 +32,7 @@
 
 ```ts
 const data = await fetch('/api/scene').then(r => r.json())   // 你的接口
-const handle = createScene3D(canvas, data, { cardRules })
+const handle = await createScene3D(canvas, data, { cardRules })
 
 // 想用包自带的「读 url ?data= 或默认 /live-data.json」约定？可选工具：
 //   import { loadLiveDataConfig } from '@/3d'
@@ -92,24 +92,29 @@ const handle = createScene3D(canvas, data, { cardRules })
 
 ## 第 2 步：写卡片组件
 
-普通 Vue 单文件组件，接收 props 渲染。除了业务 props，还会自动收到 `card-id` / `object-id`。
+普通 React 函数组件，接收 props 渲染。除了业务 props，还会自动收到 `cardId` / `objectId`。
 
-```vue
-<!-- src/components/cards/BuildingCard.vue -->
-<template>
-  <div class="card" @click.stop>
-    <strong>{{ label }}</strong>
-    <div>入驻率 {{ occupancy }}%</div>
-  </div>
-</template>
+```tsx
+// src/components/cards/BuildingCard.tsx
+import React from 'react'
 
-<script setup lang="ts">
-defineProps<{ label?: string; occupancy?: number }>()
-</script>
+interface BuildingCardProps {
+  cardId: string
+  objectId: string
+  label?: string
+  occupancy?: number
+}
 
-<style scoped>
-.card { padding: 8px 12px; background: rgba(20,20,40,.9); color: #eee; border-radius: 8px; }
-</style>
+const BuildingCard: React.FC<BuildingCardProps> = ({ label, occupancy }) => {
+  return (
+    <div className="card" onClick={(e) => e.stopPropagation()}>
+      <strong>{label}</strong>
+      <div>入驻率 {occupancy}%</div>
+    </div>
+  )
+}
+
+export default BuildingCard
 ```
 
 ---
@@ -121,7 +126,7 @@ defineProps<{ label?: string; occupancy?: number }>()
 ```ts
 // src/cards/sceneCardRules.ts
 import type { CardScanRule } from '@/3d'
-import BuildingCard from '@/components/cards/BuildingCard.vue'
+import BuildingCard from '@/components/cards/BuildingCard'
 
 // 你的业务数据，按物体 id 索引（卡片要显示的非几何信息从这里来）
 const biz: Record<string, { occupancy: number }> = {
@@ -149,8 +154,8 @@ export const cardRules: CardScanRule[] = [
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `type` | `string` | 卡片类型，对应注册的 Vue 组件 |
-| `component` | `Component` | 该类型的 Vue 组件，传入即自动注册 |
+| `type` | `string` | 卡片类型，对应注册的 React 组件 |
+| `component` | `ComponentType` | 该类型的 React 组件，传入即自动注册 |
 | `pattern` | `RegExp` | 匹配物体的 id；**捕获组 `[1]` = 分组 id** |
 | `anchor?` | `'highest' \| 'first' \| 后缀字符串 \| (meshes)=>Object3D` | 卡片定位锚点，默认 `first` |
 | `offset?` | `[x,y,z]` | 卡片相对锚点偏移，默认 `[0,0.6,0]` |
@@ -180,36 +185,37 @@ export const cardRules: CardScanRule[] = [
 
 基本照抄即可，引擎细节都在 `createScene3D` 里：
 
-```vue
-<!-- src/views/Scene3D.vue -->
-<template>
-  <div class="scene-page">
-    <canvas ref="canvasRef" class="scene-canvas" />
-    <CardHost :cards="cardStates" />
-  </div>
-</template>
-
-<script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+```tsx
+// src/views/Scene3D.tsx
+import React, { useRef, useState, useEffect } from 'react'
 import { createScene3D, CardHost, loadLiveDataConfig, type CardState } from '@/3d'
 import { cardRules } from '@/cards/sceneCardRules'
 
-const canvasRef = ref<HTMLCanvasElement | null>(null)
-const cardStates = ref<CardState[]>([])
-let handle: ReturnType<typeof createScene3D> | null = null
+const Scene3D: React.FC = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [cardStates, setCardStates] = useState<CardState[]>([])
+  const handleRef = useRef<ReturnType<typeof createScene3D> | null>(null)
 
-onMounted(async () => {
-  const data = await loadLiveDataConfig()           // 数据由你请求
-  handle = createScene3D(canvasRef.value!, data, { cardRules })
-  handle.onCardState((s) => (cardStates.value = s))
-})
-onUnmounted(() => handle?.dispose())
-</script>
+  useEffect(() => {
+    const canvas = canvasRef.current!
+    ;(async () => {
+      const data = await loadLiveDataConfig()
+      const handle = await createScene3D(canvas, data, { cardRules })
+      handle.onCardState((s) => setCardStates(s))
+      handleRef.current = handle
+    })()
+    return () => handleRef.current?.dispose()
+  }, [])
 
-<style scoped>
-.scene-page { width: 100%; height: 100%; position: relative; }
-.scene-canvas { display: block; width: 100%; height: 100%; }
-</style>
+  return (
+    <div className="scene-page">
+      <canvas ref={canvasRef} className="scene-canvas" />
+      <CardHost cards={cardStates} />
+    </div>
+  )
+}
+
+export default Scene3D
 ```
 
 就这些。`<CardHost>` 负责把你的卡片组件渲染到正确位置，`createScene3D` 负责引擎循环、环境光、控制器、相机、resize、销毁。
@@ -266,13 +272,13 @@ handle.update({
 | `app` | 引擎实例（一般不用碰） |
 | `cardManager` | 卡片管理器，可手动 `showCard/hideCard/showByType/...` |
 | `controls` | OrbitControls 实例，可编程式控制相机（`controls.target.set(...)` 等） |
-| `onCardState(cb)` | 订阅卡片状态变化，喂给 `<CardHost :cards>` |
+| `onCardState(cb)` | 订阅卡片状态变化，喂给 `<CardHost cards={...}>` |
 | `update(patch)` | 物体级增量更新（按 id 增删改），见上「增量更新」 |
 | `dispose()` | 销毁，释放 GPU/DOM/事件资源 |
 
 ### 组件 / 工具
 
-- `<CardHost :cards="cardStates" />` — 卡片宿主，`registry` 可选（默认全局注册表）
+- `<CardHost cards={cardStates} />` — 卡片宿主，`registry` 可选（默认全局注册表）
 - `cardComponentRegistry.register(type, component)` — 手动注册卡片组件（用 `cardRules.component` 则无需手动注册）
 - `scanAndRegisterCards(scene, cardManager, rules)` — 卡片扫描器（`createScene3D` 内部已调用，一般不直接用）
 - 类型：`LiveDataConfig`、`LiveDataObject`、`CardScanRule`、`CardState`、`Scene3DOptions`、`Scene3DHandle`、`SceneUpdatePatch`、`OrbitControlsInstance`
