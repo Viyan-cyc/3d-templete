@@ -51,7 +51,7 @@ export type {
 export type { CardState, CardDef } from './cards'
 
 // ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects } from './utils/liveDataLoader'
+export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from './utils/liveDataLoader'
 export type {
   LiveDataConfig,
   LiveDataCamera,
@@ -61,6 +61,22 @@ export type {
   LiveDataMaterial,
   ApplyLiveDataOptions,
 } from './utils/liveDataLoader'
+
+// ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
+export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents } from './library/library-bridge'
+
+// ---- 模型加载 provider 链（asset/http/hunyuan，阶段1 起）----
+export { loadModel, assetProvider, httpProvider, providers as modelProviders, disposeModelCache } from './loaders/ModelLoader'
+export type { ModelProvider, LoadOpts } from './loaders/ModelLoader'
+export { hunyuanProvider, normalizeKey } from './loaders/hunyuan-provider'
+
+// ---- postMessage 桥（embed↔octoapp，阶段0 起）----
+export { bindPostMessageHost, postToParent, patchHandlerFromHandle } from './bridge/postMessage-host'
+export type {
+  PostMessageHostHandlers,
+  SceneHostMessage,
+  SceneEmbedMessage,
+} from './bridge/postMessage-host'
 
 // ============================================================
 // 次选路径：SceneData + 内置组件（降级保留）

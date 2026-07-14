@@ -29,7 +29,7 @@ import type { CardStateCallback } from './cards/CardManager'
 import { createOrbitControls } from './controls/OrbitControls'
 import {
   applyLiveDataToApp,
-  loadGlbObjects,
+  loadModelObjects,
   type LiveDataConfig,
   type LiveDataObject,
 } from './utils/liveDataLoader'
@@ -65,6 +65,14 @@ export interface Scene3DOptions {
   controls?: Scene3DControlsOptions
   /** 是否启用阴影，默认 true */
   enableShadows?: boolean
+  /**
+   * 是否为交互预览态（供 octoapp iframe 嵌入）：
+   * - false（默认，生产/交付）：不挂 postMessage 桥、不挂 ScenePicker
+   * - true（预览/编辑）：由 embed.vue 调用方设 true，桥与 picker 在 embed 侧挂载
+   *
+   * 阶段0 仅作字段透传占位；ScenePicker / pick / flyTo / setTheme 的实际分支在阶段3 补。
+   */
+  interactive?: boolean
 }
 
 /** 物体级增量更新补丁 */
@@ -159,11 +167,29 @@ export async function createScene3D(
   })
   resizeObserver.observe(container)
 
-  // 9. 异步加载 GLB 模型（占位节点已在 applyLiveDataToApp 中创建）
-  //     渲染循环已启动，模型加载完成后自动出现在场景中
-  loadGlbObjects(app.scene, objectIndex, data.objects).catch((err) => {
-    console.error('[createScene3D] GLB 模型加载失败:', err)
+  // 9. 异步加载外部模型（占位节点已在 applyLiveDataToApp 中创建）
+  //     走 ModelLoader provider 链（asset/http/hunyuan）；渲染循环已启动，模型加载完成后自动出现
+  loadModelObjects(objectIndex, data.objects).catch((err) => {
+    console.error('[createScene3D] 模型加载失败:', err)
   })
+
+  // 10. 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update）
+  //     applyLiveDataToApp 已在 userData.__updatable 标记，这里注册到渲染循环
+  const updatables: THREE.Object3D[] = []
+  app.scene.traverse((obj) => {
+    if (obj.userData?.__updatable) updatables.push(obj)
+  })
+  if (updatables.length > 0) {
+    let lastTime = performance.now()
+    app.addUpdateCallback(() => {
+      const now = performance.now()
+      const delta = Math.min((now - lastTime) / 1000, 0.1) // 秒，封顶 100ms（对齐 IUpdatable 约定）
+      lastTime = now
+      for (const obj of updatables) {
+        ;(obj as unknown as { update?: (d: number) => void }).update?.(delta)
+      }
+    })
+  }
 
   let disposed = false
 

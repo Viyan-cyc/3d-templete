@@ -10,10 +10,14 @@
   },
   "dependencies": {
     "axios": "^1.18.1",
+    "gsap": "^3.15.0",
     "three": "^0.185.0",
+    "three-bvh-csg": "^0.0.18",
+    "three-mesh-bvh": "^0.9.11",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0"
   },
+  "//dependencies-note": "@cyc/3d-components 本身在 dev 阶段用 vite alias 直引 ../3d-components/src，无需 npm install；生产阶段改 dependencies 加 @cyc/3d-components 并移除 vite alias。gsap/three-bvh-csg/three-mesh-bvh 是 @cyc/3d-components 的 peerDep（Grid/Wall 组件用到）。",
   "devDependencies": {
     "@types/node": "^24.13.2",
     "@types/three": "^0.185.0",

@@ -15,15 +15,16 @@
 import * as THREE from 'three'
 import { FontLoader, type Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { App3D } from '../App3D'
 import { ComponentRegistry, AssetPool, registerAllBuilders } from '../components'
-import { resolveModelSrc } from '../models'
+import { loadModel } from '../loaders/ModelLoader'
+import { hasComponent, createComponentObject, initLibraryBridge } from '../library/library-bridge'
 
 // 全局组件注册表 + 资源缓存池（组件复用 Geometry/Material，相同参数只创建一次）
 // ComponentRegistry 是单例实例（非类），registerAllBuilders() 已向其注册所有 builder
 registerAllBuilders()
+// 初始化 3d-components 桥（注册 name→Ctor 映射，幂等）
+initLibraryBridge()
 const assetPool = new AssetPool()
 
 const DEG2RAD = Math.PI / 180
@@ -105,7 +106,7 @@ export interface LiveDataLight {
 
 export interface LiveDataObject {
   id: string
-  type: 'group' | 'mesh' | 'component' | 'glb'
+  type: 'group' | 'mesh' | 'component' | 'glb' | 'model'
   parentId: string | null
   position?: number[]
   rotation?: number[]
@@ -113,9 +114,10 @@ export interface LiveDataObject {
   geometry?: LiveDataGeometry
   material?: LiveDataMaterial
   component?: LiveDataComponent
-  /** 当 type === 'glb' 时，模型资源引用。
-   *  - 'asset:windmill' → 从 src/3d/models/ 注册表查找（Vite import 编译后的 URL）
-   *  - '/models/xxx.glb' 或 'https://...' → 原始 URL 路径
+  /** 模型资源引用（type==='glb'/'model'，或 resolver 链中 component 未命中时回落用）。
+   *  - 'asset:windmill' → 本地 modelRegistry（Vite ?url）+ GLTFLoader
+   *  - 'http(s)://...' → 远程 + 按扩展名选 loader
+   *  - 'hunyuan:风力发电机' → 混元单次生成缓存（占位 throw，回落 mesh）
    */
   src?: string
   castShadow?: boolean
@@ -123,8 +125,13 @@ export interface LiveDataObject {
 }
 
 export interface LiveDataComponent {
+  /** 内置 builder 组件类型名（desk/rack 等 17 个），走 ComponentRegistry.createByBuilder */
   type: string
   params?: Record<string, number | string>
+  /** 3d-components 组件类名（Grid/Wall/HeatMesh 等），resolver 链最高优先级，走 library-bridge */
+  name?: string
+  /** 透传给 3d-components 组件构造器的 options（对齐 ComponentOptions 对象模式） */
+  options?: Record<string, unknown>
 }
 
 export interface LiveDataGeometry {
@@ -298,20 +305,38 @@ export function createLiveObject3D(
 ): THREE.Object3D | null {
   let obj: THREE.Object3D | null = null
 
-  switch (cfg.type) {
-    case 'group':
-      obj = new THREE.Group()
+  // ── resolver 链（优先级：component.name(3d-components) > component.type(内置builder) > src(model) > geometry(mesh) > group）──
+  // ① 3d-components 组件（最高优先级）：component.name 命中 library-bridge
+  if (cfg.component?.name && hasComponent(cfg.component.name)) {
+    obj = createComponentObject(cfg.component.name, cfg.component.options ?? {})
+    if (obj) {
+      obj.name = cfg.id
       applyTransform(obj, cfg)
-      break
-    case 'mesh':
-      obj = createLiveMesh(cfg)
-      break
-    case 'component':
-      obj = createLiveComponent(cfg)
-      break
-    case 'glb':
-      obj = createLiveGlbPlaceholder(cfg)
-      break
+      if (cfg.castShadow) obj.castShadow = true
+      if (cfg.receiveShadow) obj.receiveShadow = true
+    }
+  }
+
+  // ② 内置 builder 组件：component.type 走 ComponentRegistry（保留 rack/desk 等 17 个）
+  if (!obj && cfg.component?.type) {
+    obj = createLiveComponent(cfg)
+  }
+
+  // ③ 外部模型：src 走 ModelLoader（占位 Group，异步填充）
+  if (!obj && cfg.src) {
+    obj = createModelPlaceholder(cfg)
+  }
+
+  // ④ mesh 兜底：原生几何体
+  if (!obj && (cfg.geometry || cfg.type === 'mesh')) {
+    obj = createLiveMesh(cfg)
+  }
+
+  // ⑤ group 兜底
+  if (!obj && cfg.type === 'group') {
+    obj = new THREE.Group()
+    obj.name = cfg.id
+    applyTransform(obj, cfg)
   }
 
   return obj
@@ -341,28 +366,18 @@ function createLiveComponent(cfg: LiveDataObject): THREE.Object3D | null {
   return group
 }
 
-// ── GLB 模型工厂 ──
-
-/** GLB 模型缓存：src → GLTF，避免重复加载同一模型 */
-const glbCache = new Map<string, GLTF>()
-
-/** 共享 GLTFLoader 实例 */
-let _gltfLoader: GLTFLoader | null = null
-function getGltfLoader(): GLTFLoader {
-  if (!_gltfLoader) _gltfLoader = new GLTFLoader()
-  return _gltfLoader
-}
+// ── 模型工厂（占位 + 异步填充，复用 ModelLoader）──
 
 /**
- * 为 type='glb' 的对象创建占位 Group。
- * 实际模型由 loadGlbObjects() 异步加载后填充到此 Group 中。
+ * 为带 src 的对象创建占位 Group。
+ * 实际模型由 loadModelObjects() 异步加载后填充到此 Group 中（走 ModelLoader provider 链）。
  */
-function createLiveGlbPlaceholder(cfg: LiveDataObject): THREE.Group {
+function createModelPlaceholder(cfg: LiveDataObject): THREE.Group {
   const group = new THREE.Group()
   group.name = cfg.id
-  // 标记为 GLB 占位节点，供异步加载识别
-  group.userData.__glbSrc = cfg.src ?? ''
-  group.userData.__glbId = cfg.id
+  // 标记为模型占位节点，供异步加载识别
+  group.userData.__modelSrc = cfg.src ?? ''
+  group.userData.__modelId = cfg.id
   applyTransform(group, cfg)
   if (cfg.castShadow) group.castShadow = true
   if (cfg.receiveShadow) group.receiveShadow = true
@@ -370,87 +385,83 @@ function createLiveGlbPlaceholder(cfg: LiveDataObject): THREE.Group {
 }
 
 /**
- * 异步加载场景中所有 type='glb' 的模型。
- * 在 applyLiveDataToApp 同步构建场景后调用，将 GLB 模型填充到占位 Group 中。
+ * 异步加载场景中所有带 src 的模型（type='glb'/'model'，或 component 未命中回落 src）。
+ * 在 applyLiveDataToApp 同步构建场景后调用，将模型填充到占位 Group 中。
  *
- * @returns 加载完成的 GLB 对象 id → Object3D 映射
+ * 走 ModelLoader provider 链（asset/http/hunyuan），内置原型缓存 + clone 复用。
+ * hunyuan: 前缀走单次生成缓存（见 hunyuan-provider.ts），失败回落 mesh 兜底 + SCENE_ERROR。
+ *
+ * @returns 加载完成的模型对象 id → Object3D 映射
  */
-export async function loadGlbObjects(
-  scene: THREE.Scene,
+export async function loadModelObjects(
   nodeMap: Map<string, THREE.Object3D>,
   objects?: LiveDataObject[],
+  onError?: (id: string, message: string) => void,
 ): Promise<Map<string, THREE.Object3D>> {
-  if (!objects) return nodeMap
+  if (!objects) return new Map()
 
-  // 收集所有 glb 类型的配置
-  const glbDefs = objects.filter((o) => o.type === 'glb')
-  if (glbDefs.length === 0) return nodeMap
+  // 收集所有需要异步加载模型的配置（有 src 且 src 非空）
+  const modelDefs = objects.filter((o) => o.src)
+  if (modelDefs.length === 0) return new Map()
 
-  const loader = getGltfLoader()
   const loaded = new Map<string, THREE.Object3D>()
 
-  // 并行加载所有 GLB 模型
-  const tasks = glbDefs.map(async (def) => {
-    const src = def.src
-    if (!src) {
-      console.warn(`[liveDataLoader] glb 对象 "${def.id}" 缺少 src 字段`)
-      return
-    }
-
-    const url = resolveModelSrc(src)
-
-    // 缓存：相同 src 只加载一次
-    let gltf = glbCache.get(url)
-    if (!gltf) {
-      try {
-        gltf = await new Promise<GLTF>((resolve, reject) => {
-          loader.load(url, resolve, undefined, reject)
-        })
-        glbCache.set(url, gltf)
-      } catch (err) {
-        console.error(`[liveDataLoader] GLB 加载失败: ${url}`, err)
-        return
-      }
-    }
-
+  // 并行加载所有模型
+  const tasks = modelDefs.map(async (def) => {
+    const src = def.src!
     // 找到占位 Group
     const placeholder = nodeMap.get(def.id)
     if (!placeholder) return
 
-    // 克隆场景（同一 GLB 被多个对象引用时各自独立）
-    const model = gltf.scene.clone()
-
-    // 应用阴影设置
-    if (def.castShadow) {
-      model.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) child.castShadow = true
+    try {
+      const model = await loadModel(src, {
+        castShadow: def.castShadow,
+        receiveShadow: def.receiveShadow,
       })
-    }
-    if (def.receiveShadow) {
+
+      // 将模型内容添加到占位 Group
+      placeholder.add(model)
+      // 清除占位标记
+      delete placeholder.userData.__modelSrc
+      delete placeholder.userData.__modelId
+
+      // 注册子节点到 nodeMap（供 parentId 引用）
       model.traverse((child) => {
-        if ((child as THREE.Mesh).isMesh) child.receiveShadow = true
+        if (child !== model && child.name) {
+          child.userData.id = `${def.id}_${child.name}`
+          nodeMap.set(child.userData.id, child)
+        }
       })
+
+      loaded.set(def.id, placeholder)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[liveDataLoader] 模型加载失败: ${src} (${def.id})`, msg)
+      // 回落：占位 Group 内放一个 box 兜底，不阻塞其余物体
+      const fallbackGeo = new THREE.BoxGeometry(1, 1, 1)
+      const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xff4444 })
+      const fallback = new THREE.Mesh(fallbackGeo, fallbackMat)
+      fallback.name = `${def.id}_fallback`
+      placeholder.add(fallback)
+      delete placeholder.userData.__modelSrc
+      delete placeholder.userData.__modelId
+      onError?.(def.id, `模型加载失败 ${src}: ${msg}`)
+      loaded.set(def.id, placeholder)
     }
-
-    // 将模型内容添加到占位 Group
-    placeholder.add(model)
-    // 清除占位标记
-    delete placeholder.userData.__glbSrc
-    delete placeholder.userData.__glbId
-
-    // 注册子节点到 nodeMap（供 parentId 引用）
-    model.traverse((child) => {
-      if (child !== model && child.name) {
-        child.userData.id = `${def.id}_${child.name}`
-        nodeMap.set(child.userData.id, child)
-      }
-    })
-
-    loaded.set(def.id, placeholder)
   })
 
   await Promise.all(tasks)
   return loaded
+}
+
+/** @deprecated 用 loadModelObjects 代替。保留旧名兼容外部调用方（如 index.ts 导出）。 */
+export async function loadGlbObjects(
+  _scene: THREE.Scene,
+  nodeMap: Map<string, THREE.Object3D>,
+  objects?: LiveDataObject[],
+  onError?: (id: string, message: string) => void,
+): Promise<Map<string, THREE.Object3D>> {
+  return loadModelObjects(nodeMap, objects, onError)
 }
 
 // ── Mesh 工厂 ──

@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "angleUnit": "deg",
+  "scene": {
+    "background": "#1a1a2e",
+    "environment": { "preset": "studio", "intensity": 0.8 }
+  },
+  "camera": {
+    "type": "perspective",
+    "position": [8, 6, 10],
+    "lookAt": [0, 0.5, 0],
+    "perspective": { "fov": 50, "near": 0.1, "far": 1000 }
+  },
+  "lights": [
+    { "type": "ambient", "intensity": 0.5 },
+    { "type": "directional", "intensity": 1.2, "position": [8, 12, 6], "castShadow": true,
+      "shadow": { "mapSize": 2048, "camera": { "near": 0.5, "far": 50, "left": -15, "right": 15, "top": 15, "bottom": -15 } } }
+  ],
+  "objects": [
+    {
+      "id": "ground-1", "type": "mesh", "parentId": null,
+      "geometry": { "type": "plane", "params": { "width": 20, "height": 20 } },
+      "material": { "type": "standard", "color": "#3a3a5c", "roughness": 0.9 },
+      "position": [0, 0, 0], "rotation": [-1.5708, 0, 0], "receiveShadow": true
+    },
+    {
+      "id": "grid-1", "type": "component", "parentId": null,
+      "component": { "type": "", "name": "Grid", "options": { "size": 10, "division": 10 } },
+      "position": [0, 0.01, 0]
+    },
+    {
+      "id": "windmill-1", "type": "model", "parentId": null,
+      "src": "asset:windmill",
+      "position": [3, 0, 0], "scale": [1,1,1], "castShadow": true
+    },
+    {
+      "id": "hunyuan-1", "type": "model", "parentId": null,
+      "src": "hunyuan:风力发电机",
+      "position": [-3, 0, 0]
+    },
+    {
+      "id": "hunyuan-2", "type": "model", "parentId": null,
+      "src": "hunyuan:风力发电机",
+      "position": [-5, 0, 0]
+    },
+    {
+      "id": "box-1", "type": "mesh", "parentId": null,
+      "geometry": { "type": "box", "params": { "width": 1, "height": 1, "depth": 1 } },
+      "material": { "type": "standard", "color": "#e94560" },
+      "position": [0, 0.5, 2], "castShadow": true
+    }
+  ]
+}
