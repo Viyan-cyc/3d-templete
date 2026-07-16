@@ -259,11 +259,16 @@ export function applyLiveDataToApp(
 
   // ── 5. 对象层级树（两遍构建） ──
   const nodeMap = new Map<string, THREE.Object3D>()
+  let createdCount = 0
+  let skippedCount = 0
+  const debug =
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true'
   if (config.objects) {
     // 第一遍：创建
     for (const oc of config.objects) {
       const node = createLiveObject3D(oc)
       if (node) {
+        createdCount++
         nodeMap.set(oc.id, node)
         // 组件节点:把展开的子节点也注册进 nodeMap,供其他物体的 parentId 引用
         if (oc.type === 'component') {
@@ -273,6 +278,15 @@ export function applyLiveDataToApp(
             }
           })
         }
+      } else {
+        // 解析失败（如 type:component 的 builder 名不存在、无可识别的 geometry/src）：
+        // 原先静默跳过会导致"空场景只有背景"，这里打 warn 便于定位。
+        skippedCount++
+        console.warn(
+          `[liveDataLoader] 无法创建物体，跳过: id=${oc.id} type=${oc.type}` +
+            ` component.name=${oc.component?.name} component.type=${oc.component?.type}` +
+            ` src=${oc.src ?? '-'} geometry=${oc.geometry?.type ?? '-'}`,
+        )
       }
     }
 
@@ -290,6 +304,12 @@ export function applyLiveDataToApp(
       } else {
         app.scene.add(node)
       }
+    }
+    if (debug) {
+      console.log(
+        `[liveDataLoader] 场景构建完成: 创建 ${createdCount}/${config.objects.length} 物体` +
+          (skippedCount > 0 ? `，跳过 ${skippedCount} 个（见上方 warn）` : ''),
+      )
     }
   }
 
@@ -337,6 +357,13 @@ export function createLiveObject3D(
     obj = new THREE.Group()
     obj.name = cfg.id
     applyTransform(obj, cfg)
+  }
+
+  // 统一写入 userData.__id：覆盖所有 resolver 路径（component/builder/model占位/mesh/group）。
+  // ScenePicker raycast 命中后沿父子链向上查找 userData.__id 拿到所属 object id（阶段3）。
+  // sceneUpdate.upsertObjects 新建对象也走本函数，故增量 patch 新增的物体也带 __id。
+  if (obj && cfg.id) {
+    obj.userData.__id = cfg.id
   }
 
   return obj

@@ -40,6 +40,7 @@ import {
   upsertObjects,
   type ObjectIndex,
 } from './utils/sceneUpdate'
+import { ScenePicker } from './interaction/picker'
 
 export interface Scene3DControlsOptions {
   minDistance?: number
@@ -96,6 +97,12 @@ export interface Scene3DHandle {
   update(patch: SceneUpdatePatch): void
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
   setDebug(mode: boolean): void
+  /** 编辑态拾取器（仅 interactive:true 时存在；embed.vue 设 onPick 回传 SCENE_PICK） */
+  picker?: ScenePicker
+  /** 聚焦到某物体（仅 interactive:true；SCENE_FLY_TO 用） */
+  flyTo?: (targetId: string) => void
+  /** 切换主题（仅 interactive:true；SCENE_THEME 用） */
+  setTheme?: (mode: 'light' | 'dark') => void
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
@@ -127,7 +134,7 @@ export async function createScene3D(
   data: LiveDataConfig,
   options: Scene3DOptions = {},
 ): Promise<Scene3DHandle> {
-  const { cardRules, controls: controlsOpts, enableShadows = true } = options
+  const { cardRules, controls: controlsOpts, enableShadows = true, interactive = false } = options
   const container = options.container ?? canvas.parentElement ?? document.body
 
   // URL 参数优先于 options.debug
@@ -191,6 +198,43 @@ export async function createScene3D(
     })
   }
 
+  // 11. 编辑态拾取器（仅 interactive:true）：构造 ScenePicker，
+  //     挂每帧 update 让选中物的 BoxHelper 高亮跟随移动。
+  //     onPick 回调由 embed.vue 设置（postMessage SCENE_PICK 给宿主）。
+  //     flyTo/setTheme 仅 interactive 时挂载，供 SCENE_FLY_TO / SCENE_THEME 调用。
+  let picker: ScenePicker | undefined
+  let flyTo: ((targetId: string) => void) | undefined
+  let setTheme: ((mode: 'light' | 'dark') => void) | undefined
+  if (interactive) {
+    picker = new ScenePicker(app.scene, app.camera, canvas)
+    app.addUpdateCallback(() => picker!.update())
+
+    flyTo = (targetId: string) => {
+      let target: THREE.Object3D | null = null
+      app.scene.traverse((o) => {
+        if (!target && o.userData?.__id === targetId) target = o
+      })
+      if (!target) return
+      const box = new THREE.Box3().setFromObject(target)
+      const center = new THREE.Vector3()
+      const size = new THREE.Vector3()
+      box.getCenter(center)
+      box.getSize(size)
+      const maxDim = Math.max(size.x, size.y, size.z)
+      const dist = maxDim * 2.2 + 1
+      controls.target.copy(center)
+      const dir = new THREE.Vector3().subVectors(app.camera.position, controls.target)
+      if (dir.lengthSq() < 1e-6) dir.set(1, 0.8, 1)
+      dir.normalize()
+      app.camera.position.copy(center).addScaledVector(dir, dist)
+      controls.update()
+    }
+
+    setTheme = (mode: 'light' | 'dark') => {
+      app.scene.background = new THREE.Color(mode === 'dark' ? '#1a1a2e' : '#c9ccd6')
+    }
+  }
+
   let disposed = false
 
   return {
@@ -211,9 +255,13 @@ export async function createScene3D(
     setDebug(mode: boolean): void {
       app.setDebug(mode)
     },
+    picker,
+    flyTo,
+    setTheme,
     dispose(): void {
       if (disposed) return
       disposed = true
+      picker?.dispose()
       resizeObserver.disconnect()
       controls.dispose()
       cardManager.dispose()

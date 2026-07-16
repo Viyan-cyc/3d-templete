@@ -78,6 +78,10 @@ export type {
   SceneEmbedMessage,
 } from './bridge/postMessage-host'
 
+// ---- 编辑态拾取（interactive 模式，阶段3 起）----
+export { ScenePicker } from './interaction/picker'
+export type { PickInfo } from './interaction/picker'
+
 // ============================================================
 // 次选路径：SceneData + 内置组件（降级保留）
 // ============================================================

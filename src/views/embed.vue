@@ -15,10 +15,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import * as THREE from 'three'
 import {
   createScene3D,
   CardHost,
   type Scene3DHandle,
+  type SceneUpdatePatch,
   type CardState,
   type LiveDataConfig,
 } from '@/3d'
@@ -33,9 +35,54 @@ const error = ref('')
 const cardStates = ref<CardState[]>([])
 let handle: Scene3DHandle | null = null
 let detachBridge: (() => void) | null = null
+/** 最近一次已渲染的 SCENE_UPDATE payload JSON——用于去重。
+ *  octoapp 会在 iframe onLoad 与收到 SCENE_READY 后各发一次相同 payload，
+ *  若不去重会触发两个 createScene3D 并发抢占同一 canvas（渲染冲突/白屏）。 */
+let lastRenderedJson = ''
+
+/** 是否开启调试（URL 加 ?debug=true）：控制详细日志 + window.__scene/__camera/__handle 暴露 */
+const isDebug =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true'
+
+/** DEBUG 工具（仅 ?debug=true 调用）：暴露 three 对象到 window + 打印场景包围盒/相机/子节点 */
+function logSceneDebug(h: Scene3DHandle): void {
+  const w = window as unknown as { __scene?: unknown; __camera?: unknown; __handle?: unknown }
+  w.__handle = h
+  w.__scene = h.app.scene
+  w.__camera = h.app.camera
+  try {
+    const box = new THREE.Box3().setFromObject(h.app.scene)
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    console.log('[embed] 场景包围盒:', {
+      isEmpty: box.isEmpty(),
+      min: box.min.toArray(),
+      max: box.max.toArray(),
+      size: size.toArray(),
+      center: center.toArray(),
+    })
+    const cam = h.app.camera as THREE.PerspectiveCamera
+    console.log('[embed] 相机:', {
+      type: cam.type,
+      position: cam.position.toArray(),
+      target: h.controls.target.toArray(),
+      near: cam.near,
+      far: cam.far,
+      fov: cam.fov,
+    })
+    console.log(
+      '[embed] 场景直接子节点:',
+      h.app.scene.children.length,
+      h.app.scene.children.map((c) => c.name || c.type),
+    )
+  } catch (e) {
+    console.warn('[embed] 调试信息计算失败', e)
+  }
+}
 
 /** 渲染（或重新渲染）一个完整 SceneConfig；data 为 null 时清空 */
 async function renderScene(data: LiveDataConfig | null) {
+  if (isDebug) console.log('[embed] renderScene 开始, objects=', data?.objects?.length ?? 0)
   const canvas = canvasRef.value
   if (!canvas) {
     postToParent({ type: 'SCENE_ERROR', message: 'Canvas 不存在' })
@@ -57,7 +104,7 @@ async function renderScene(data: LiveDataConfig | null) {
   try {
     handle = await createScene3D(canvas, data, {
       cardRules,
-      interactive: true, // 预览/编辑态；阶段0 仅占位，阶段3 才挂 picker
+      interactive: true, // 预览/编辑态：挂 postMessage 桥 + ScenePicker
       controls: {
         maxPolarAngle: Math.PI / 2.3,
       },
@@ -65,6 +112,22 @@ async function renderScene(data: LiveDataConfig | null) {
     handle.onCardState((states) => {
       cardStates.value = states
     })
+    // 拾取回调：命中物体 → postMessage SCENE_PICK 给宿主（octoapp 弹属性编辑器）
+    if (handle.picker) {
+      handle.picker.onPick = (info) => {
+        postToParent({
+          type: 'SCENE_PICK',
+          id: info.id,
+          name: info.name,
+          component: info.component,
+          props: info.props,
+        })
+      }
+    }
+
+    // DEBUG（仅 ?debug=true）：暴露 three 对象 + 打印包围盒/相机/子节点
+    if (isDebug) logSceneDebug(handle)
+
     loading.value = false
     statusText.value = ''
   } catch (err: unknown) {
@@ -85,13 +148,34 @@ onMounted(() => {
   // 绑定 postMessage 桥
   detachBridge = bindPostMessageHost({
     onScene: async (data) => {
+      if (isDebug)
+        console.log(
+          '[embed] 收到 SCENE_UPDATE, objects=',
+          (data as { objects?: unknown[] } | null)?.objects?.length ?? 0,
+        )
+      // 去重：onLoad 与 SCENE_READY 重发会带来相同 payload，只渲染一次
+      const json = data === null ? 'null' : JSON.stringify(data)
+      if (json === lastRenderedJson) {
+        if (isDebug) console.log('[embed] 重复 SCENE_UPDATE（同 payload），跳过渲染')
+        return
+      }
+      lastRenderedJson = json
       await renderScene(data as LiveDataConfig | null)
     },
-    // 以下阶段3 启用
-    onPickMode: () => {},
-    onFlyTo: () => {},
-    onTheme: () => {},
-    onPatch: () => {},
+    // 以下阶段3：拾取开关 / 聚焦 / 主题 / 增量补丁
+    onPickMode: (enabled) => {
+      if (!handle?.picker) return
+      enabled ? handle.picker.enable() : handle.picker.disable()
+    },
+    onFlyTo: (targetId) => {
+      handle?.flyTo?.(targetId)
+    },
+    onTheme: (mode) => {
+      handle?.setTheme?.(mode)
+    },
+    onPatch: (patch) => {
+      handle?.update(patch as SceneUpdatePatch)
+    },
   })
 
   // 兜底：独立访问 /embed（非 iframe）时，等一会若没收到 SCENE_UPDATE，
