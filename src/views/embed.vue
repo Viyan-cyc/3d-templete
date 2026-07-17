@@ -167,6 +167,9 @@ onMounted(() => {
       if (!handle?.picker) return
       enabled ? handle.picker.enable() : handle.picker.disable()
     },
+    onPickGranularity: (mode) => {
+      handle?.picker?.setGranularity(mode)
+    },
     onFlyTo: (targetId) => {
       handle?.flyTo?.(targetId)
     },

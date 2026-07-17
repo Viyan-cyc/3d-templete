@@ -305,6 +305,28 @@ export function applyLiveDataToApp(
         app.scene.add(node)
       }
     }
+
+    // ── 标记分区(__zone) / 逻辑物体根(__logicalRoot)，供 ScenePicker「整体/部件」选中模式 ──
+    // root = parentId 为 null（通常 sceneRoot）；zone = root 的直接子（分区 group）；
+    // logicalRoot = zone 的直接子（用户视角的"一个整体"，如一棵树/一张桌子）。
+    // 纯 parentId 图计算，不依赖 Three 挂载结果；命中后 ScenePicker whole 模式沿父子链找 __logicalRoot。
+    {
+      const rootIds = new Set<string>()
+      for (const o of config.objects) if (!o.parentId) rootIds.add(o.id)
+      const zoneIds = new Set<string>()
+      for (const o of config.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id)
+      for (const id of zoneIds) {
+        const n = nodeMap.get(id)
+        if (n) n.userData.__zone = true
+      }
+      for (const o of config.objects) {
+        if (o.parentId && zoneIds.has(o.parentId)) {
+          const n = nodeMap.get(o.id)
+          if (n) n.userData.__logicalRoot = true
+        }
+      }
+    }
+
     if (debug) {
       console.log(
         `[liveDataLoader] 场景构建完成: 创建 ${createdCount}/${config.objects.length} 物体` +

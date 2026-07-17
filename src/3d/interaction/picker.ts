@@ -45,6 +45,14 @@ export class ScenePicker {
   /** 复用 Vector2 / ndc，避免每次 pick 分配 */
   private ndc = new THREE.Vector2()
 
+  /**
+   * 选中粒度：
+   * - 'part'（默认）：取命中点沿父子链的第一个 __id（叶子部件，如树干/树冠）。
+   * - 'whole'：取最近的 __logicalRoot 祖先（用户视角的"一个整体"，如整棵树），
+   *   链上无 __logicalRoot 时回落到叶子。由宿主通过 SCENE_PICK_GRANULARITY 切换。
+   */
+  private granularity: 'part' | 'whole' = 'part'
+
   /** 拾取回调（embed.vue 设：把 PickInfo postMessage 给宿主） */
   onPick: ((info: PickInfo) => void) | null = null
 
@@ -85,8 +93,17 @@ export class ScenePicker {
     }
   }
 
+  /** 设置选中粒度（'part' | 'whole'），由 postMessage 桥 SCENE_PICK_GRANULARITY 调用 */
+  setGranularity(mode: 'part' | 'whole'): void {
+    this.granularity = mode
+  }
+
   /**
    * 在指定 NDC 坐标拾取。公开方法，也可供编程式调用（如 SCENE_FLY_TO 后高亮）。
+   *
+   * 粒度（this.granularity）：
+   * - 'part'：取命中点沿父子链的第一个 __id（叶子部件）。
+   * - 'whole'：取最近的 __logicalRoot 祖先（整体）；链上无 __logicalRoot 时回落到首个 __id。
    */
   pickAt(ndc: THREE.Vector2): void {
     this.ray.setFromCamera(ndc, this.camera)
@@ -94,26 +111,51 @@ export class ScenePicker {
 
     for (const hit of hits) {
       // 沿父子链向上找 userData.__id（liveDataLoader 写入于每个 object 根节点）
+      let firstIdObj: THREE.Object3D | null = null
+      let firstId = ''
       let cur: THREE.Object3D | null = hit.object
       while (cur) {
         const id = cur.userData?.__id
         if (typeof id === 'string' && id !== '') {
-          this.highlightObject(cur)
-          const info: PickInfo = {
-            id,
-            name: cur.name || id,
-            component: typeof cur.userData?.__componentName === 'string' ? cur.userData.__componentName : undefined,
+          if (!firstIdObj) {
+            firstIdObj = cur
+            firstId = id
           }
-          this.onPick?.(info)
-          return
+          // part 模式：首个 __id 即命中（叶子部件）
+          if (this.granularity === 'part') {
+            this.emitPick(cur, id)
+            return
+          }
+          // whole 模式：继续向上找 __logicalRoot（整体），命中则选中整体
+          if (this.granularity === 'whole' && cur.userData?.__logicalRoot === true) {
+            this.emitPick(cur, id)
+            return
+          }
         }
         cur = cur.parent
+      }
+      // whole 模式但链上无 __logicalRoot（如点中分区/结构 group 本身）→ 回落叶子
+      if (firstIdObj) {
+        this.emitPick(firstIdObj, firstId)
+        return
       }
     }
 
     // 未命中任何带 __id 的物体 → 取消选中
     this.clearHighlight()
     this.onPick?.({ id: '' })
+  }
+
+  /** 高亮 + 回调的统一出口（part/whole 两模式共用） */
+  private emitPick(obj: THREE.Object3D, id: string): void {
+    this.highlightObject(obj)
+    const info: PickInfo = {
+      id,
+      name: obj.name || id,
+      component:
+        typeof obj.userData?.__componentName === 'string' ? obj.userData.__componentName : undefined,
+    }
+    this.onPick?.(info)
   }
 
   /** 销毁：摘监听 + 清高亮 */

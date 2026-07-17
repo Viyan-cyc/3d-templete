@@ -7,6 +7,7 @@
  *  宿主 → embed（父→子）：
  *    SCENE_UPDATE   { payload: SceneConfig | null }   推送/清空场景 JSON
  *    SCENE_PICK_MODE { enabled: boolean }             开/关编辑态选中（阶段3）
+ *    SCENE_PICK_GRANULARITY { granularity }           选中粒度 part(部件)|whole(整体)
  *    SCENE_FLY_TO   { targetId: string }              聚焦物体（阶段3）
  *    SCENE_THEME    { mode: 'light'|'dark' }          切主题（阶段3）
  *    SCENE_PATCH    { objects: {...} }                增量更新（阶段3）
@@ -25,11 +26,13 @@ import type { Scene3DHandle } from '../createScene3D'
 
 /** 宿主→embed 的消息载荷类型（阶段0 仅 SCENE_UPDATE 有实质处理） */
 export interface SceneHostMessage {
-  type: 'SCENE_UPDATE' | 'SCENE_PICK_MODE' | 'SCENE_FLY_TO' | 'SCENE_THEME' | 'SCENE_PATCH'
+  type: 'SCENE_UPDATE' | 'SCENE_PICK_MODE' | 'SCENE_PICK_GRANULARITY' | 'SCENE_FLY_TO' | 'SCENE_THEME' | 'SCENE_PATCH'
   payload?: unknown
   enabled?: boolean
   targetId?: string
   mode?: 'light' | 'dark'
+  /** SCENE_PICK_GRANULARITY 的选中粒度：'part'(部件) | 'whole'(整体) */
+  granularity?: 'part' | 'whole'
 }
 
 /** embed→宿主的消息载荷 */
@@ -44,6 +47,8 @@ export interface PostMessageHostHandlers {
   onScene: (data: unknown | null) => void | Promise<void>
   /** 以下阶段3 启用，阶段0 留空实现 */
   onPickMode?: (enabled: boolean) => void
+  /** 选中粒度切换：'part'(部件) | 'whole'(整体) */
+  onPickGranularity?: (mode: 'part' | 'whole') => void
   onFlyTo?: (targetId: string) => void
   onTheme?: (mode: 'light' | 'dark') => void
   onPatch?: (patch: unknown) => void
@@ -80,6 +85,9 @@ export function bindPostMessageHost(handlers: PostMessageHostHandlers): () => vo
           break
         case 'SCENE_PICK_MODE':
           handlers.onPickMode?.(data.enabled ?? false)
+          break
+        case 'SCENE_PICK_GRANULARITY':
+          handlers.onPickGranularity?.(data.granularity ?? 'part')
           break
         case 'SCENE_FLY_TO':
           if (data.targetId) handlers.onFlyTo?.(data.targetId)
