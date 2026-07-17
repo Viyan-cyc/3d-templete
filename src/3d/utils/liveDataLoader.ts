@@ -122,6 +122,9 @@ export interface LiveDataObject {
   src?: string
   castShadow?: boolean
   receiveShadow?: boolean
+  /** 分区容器标记（由宿主 octoapp mergeSceneObjects 据 planner.slots 注入）。
+   *  zone 身份权威来源，支持嵌套分区；无标记时下方标记逻辑回落到「root 直接子=zone」启发式。 */
+  __zone?: boolean
 }
 
 export interface LiveDataComponent {
@@ -307,20 +310,27 @@ export function applyLiveDataToApp(
     }
 
     // ── 标记分区(__zone) / 逻辑物体根(__logicalRoot)，供 ScenePicker「整体/部件」选中模式 ──
-    // root = parentId 为 null（通常 sceneRoot）；zone = root 的直接子（分区 group）；
-    // logicalRoot = zone 的直接子（用户视角的"一个整体"，如一棵树/一张桌子）。
+    // zone 身份优先读宿主注入的 o.__zone（权威源 = octoapp planner.slots.element_id，支持嵌套分区，
+    //   如 tableAndPropsZone 挂在 platformAndGroundZone 下——两者都是 zone）；无任何 __zone 标记时
+    //   （旧场景/示例/SAMPLE_SCENE）回落到「root 的直接子=zone」启发式。
+    // logicalRoot = zone 的直接子（用户视角的"一个整体"，如一棵树/一张桌子）；排除自身也是 zone 的节点
+    //   （嵌套分区下子 zone 不应被当 logicalRoot，否则点中其子孙会整体选中整个子分区——曾发的 bug）。
     // 纯 parentId 图计算，不依赖 Three 挂载结果；命中后 ScenePicker whole 模式沿父子链找 __logicalRoot。
     {
       const rootIds = new Set<string>()
       for (const o of config.objects) if (!o.parentId) rootIds.add(o.id)
       const zoneIds = new Set<string>()
-      for (const o of config.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id)
+      for (const o of config.objects) if (o.__zone) zoneIds.add(o.id)
+      if (zoneIds.size === 0) {
+        // 回落：无 __zone 标记的旧场景，用「root 的直接子」启发式
+        for (const o of config.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id)
+      }
       for (const id of zoneIds) {
         const n = nodeMap.get(id)
         if (n) n.userData.__zone = true
       }
       for (const o of config.objects) {
-        if (o.parentId && zoneIds.has(o.parentId)) {
+        if (o.parentId && zoneIds.has(o.parentId) && !zoneIds.has(o.id)) {
           const n = nodeMap.get(o.id)
           if (n) n.userData.__logicalRoot = true
         }
