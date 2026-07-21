@@ -28,6 +28,8 @@ export class App3D {
   private _animationId: number = 0
   private _isRunning: boolean = false
   private _resizeHandler: (() => void) | null = null
+  /** ResizeObserver 监听 canvas 尺寸变化（比 window resize 可靠：iframe 嵌入时宿主改 iframe 尺寸也能触发） */
+  private _resizeObserver: ResizeObserver | null = null
   private _startTime: number = 0
   private _prevTime: number = 0
   private _updateCallbacks: Array<() => void> = []
@@ -53,7 +55,11 @@ export class App3D {
     // ---- Renderer ----
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1))
-    this.renderer.setSize(canvas.clientWidth, canvas.clientHeight)
+    // updateStyle=false：不覆盖 canvas 的 CSS（.scene-canvas width/height:100%），
+    // 让 canvas 显示尺寸跟随父容器；只设绘图缓冲分辨率（width/height attribute）。
+    // 若 updateStyle=true（默认），setSize 会把 style 钉成像素值，canvas 不再跟随父容器，
+    // offsetWidth 锁死 → ResizeObserver 永不触发 → 缩放无响应。
+    this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false)
     this.renderer.shadowMap.enabled = enableShadows
     this.renderer.shadowMap.type = THREE.PCFShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -102,7 +108,13 @@ export class App3D {
     this._isRunning = true
 
     this._resizeHandler = this._onResize.bind(this)
+    // 用 ResizeObserver 监听 canvas 尺寸变化（比 window resize 可靠）：
+    // iframe 嵌入时宿主改 iframe CSS 尺寸 → canvas 跟着变 → 直接触发，无需 window.resize 事件。
+    this._resizeObserver = new ResizeObserver(this._resizeHandler)
+    this._resizeObserver.observe(this._canvas)
+    // 兜底：window resize 也监听（独立窗口缩放场景）
     window.addEventListener('resize', this._resizeHandler)
+    this._onResize()
 
     this._animate()
   }
@@ -113,6 +125,10 @@ export class App3D {
     if (this._animationId) {
       cancelAnimationFrame(this._animationId)
       this._animationId = 0
+    }
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect()
+      this._resizeObserver = null
     }
     if (this._resizeHandler) {
       window.removeEventListener('resize', this._resizeHandler)
@@ -237,11 +253,13 @@ export class App3D {
   }
 
   private _onResize(): void {
-    const width = this._canvas.clientWidth
-    const height = this._canvas.clientHeight
+    // 用 offsetWidth/offsetHeight（含 border，比 clientWidth 更贴合实际布局尺寸，对齐 three.js 官方 onWindowResize 习惯）
+    const width = this._canvas.offsetWidth
+    const height = this._canvas.offsetHeight
     if (width === 0 || height === 0) return
 
-    this.renderer.setSize(width, height)
+    // updateStyle=false：保持 canvas CSS 100% 跟随父容器，只更新绘图缓冲分辨率
+    this.renderer.setSize(width, height, false)
 
     const cam = this.camera
     const aspect = width / Math.max(height, 1)

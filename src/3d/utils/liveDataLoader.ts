@@ -163,16 +163,18 @@ export interface LiveDataMaterial {
 // 加载
 // ══════════════════════════════════════════════════════════════
 
-/** 从 URL 加载 live-data 场景配置 */
+/** 从 URL 加载 live-data 场景配置。
+ *  URL 参数 `?fetch=<file>` 指定场景文件（与 pattern 实时预览协议一致）；
+ *  无参数时回落到 defaultFile（默认 live-data.json）。 */
 export async function loadLiveDataConfig(
   defaultFile = 'live-data.json',
 ): Promise<LiveDataConfig> {
   const params = new URLSearchParams(window.location.search)
-  const dataParam = params.get('data')
-  const url = dataParam
-    ? /^https?:\/\//.test(dataParam)
-      ? dataParam
-      : `/${dataParam}`
+  const fetchParam = params.get('fetch')
+  const url = fetchParam
+    ? /^https?:\/\//.test(fetchParam)
+      ? fetchParam
+      : `/${fetchParam}`
     : `/${defaultFile}`
 
   const res = await fetch(url)

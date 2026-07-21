@@ -87,142 +87,6 @@
       "__zone": true
     },
     {
-      "id": "envrPlantGroup",
-      "type": "group",
-      "parentId": "envAreaZone",
-      "position": [
-        1.2,
-        0,
-        1.2
-      ]
-    },
-    {
-      "id": "envrPlantFoliage",
-      "type": "mesh",
-      "parentId": "envrPlantGroup",
-      "geometry": {
-        "type": "sphere",
-        "params": {
-          "radius": 0.4,
-          "widthSegments": 8,
-          "heightSegments": 6
-        }
-      },
-      "material": {
-        "type": "standard",
-        "color": "#3a6b35",
-        "roughness": 0.8
-      },
-      "position": [
-        0,
-        0.6,
-        0
-      ],
-      "castShadow": true
-    },
-    {
-      "id": "envrPlantPot",
-      "type": "mesh",
-      "parentId": "envrPlantGroup",
-      "geometry": {
-        "type": "cylinder",
-        "params": {
-          "radiusTop": 0.15,
-          "radiusBottom": 0.12,
-          "height": 0.4,
-          "radialSegments": 12
-        }
-      },
-      "material": {
-        "type": "standard",
-        "color": "#c67a4b",
-        "roughness": 0.9
-      },
-      "position": [
-        0,
-        0.2,
-        0
-      ],
-      "castShadow": true
-    },
-    {
-      "id": "envrBackWall",
-      "type": "mesh",
-      "parentId": "envAreaZone",
-      "geometry": {
-        "type": "box",
-        "params": {
-          "width": 3,
-          "height": 2.5,
-          "depth": 0.1
-        }
-      },
-      "material": {
-        "type": "standard",
-        "color": "#f5f5f5",
-        "roughness": 0.7
-      },
-      "position": [
-        0,
-        1.25,
-        -1.5
-      ],
-      "castShadow": true,
-      "receiveShadow": true
-    },
-    {
-      "id": "envrFloorPlane",
-      "type": "mesh",
-      "parentId": "envAreaZone",
-      "geometry": {
-        "type": "plane",
-        "params": {
-          "width": 3,
-          "height": 3
-        }
-      },
-      "material": {
-        "type": "standard",
-        "color": "#e8d5c0",
-        "roughness": 0.85
-      },
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "rotation": [
-        -90,
-        0,
-        0
-      ],
-      "receiveShadow": true
-    },
-    {
-      "id": "envrPainting",
-      "type": "mesh",
-      "parentId": "envAreaZone",
-      "geometry": {
-        "type": "box",
-        "params": {
-          "width": 0.6,
-          "height": 0.8,
-          "depth": 0.05
-        }
-      },
-      "material": {
-        "type": "standard",
-        "color": "#d4a373",
-        "roughness": 0.5
-      },
-      "position": [
-        0,
-        1.6,
-        -1.45
-      ],
-      "castShadow": true
-    },
-    {
       "id": "tablTableGroup",
       "type": "group",
       "parentId": "tableAreaZone",
@@ -507,6 +371,118 @@
       "position": [
         0.07,
         0.05,
+        0
+      ],
+      "castShadow": true
+    },
+    {
+      "id": "envrFloorPlane",
+      "type": "mesh",
+      "parentId": "envAreaZone",
+      "geometry": {
+        "type": "plane",
+        "params": {
+          "width": 3,
+          "height": 3
+        }
+      },
+      "material": {
+        "type": "standard",
+        "color": "#e8d5c0",
+        "roughness": 0.85
+      },
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "rotation": [
+        -90,
+        0,
+        0
+      ],
+      "receiveShadow": true
+    },
+    {
+      "id": "envrBackWall",
+      "type": "mesh",
+      "parentId": "envAreaZone",
+      "geometry": {
+        "type": "box",
+        "params": {
+          "width": 3,
+          "height": 2.5,
+          "depth": 0.1
+        }
+      },
+      "material": {
+        "type": "standard",
+        "color": "#f5f5f5",
+        "roughness": 0.7
+      },
+      "position": [
+        0,
+        1.25,
+        -1.5
+      ],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
+      "id": "envrPlantGroup",
+      "type": "group",
+      "parentId": "envAreaZone",
+      "position": [
+        1.2,
+        0,
+        1.2
+      ]
+    },
+    {
+      "id": "envrPlantPot",
+      "type": "mesh",
+      "parentId": "envrPlantGroup",
+      "geometry": {
+        "type": "cylinder",
+        "params": {
+          "radiusTop": 0.15,
+          "radiusBottom": 0.12,
+          "height": 0.4,
+          "radialSegments": 12
+        }
+      },
+      "material": {
+        "type": "standard",
+        "color": "#c67a4b",
+        "roughness": 0.9
+      },
+      "position": [
+        0,
+        0.2,
+        0
+      ],
+      "castShadow": true
+    },
+    {
+      "id": "envrPlantFoliage",
+      "type": "mesh",
+      "parentId": "envrPlantGroup",
+      "geometry": {
+        "type": "sphere",
+        "params": {
+          "radius": 0.4,
+          "widthSegments": 8,
+          "heightSegments": 6
+        }
+      },
+      "material": {
+        "type": "standard",
+        "color": "#3a6b35",
+        "roughness": 0.8
+      },
+      "position": [
+        0,
+        0.6,
         0
       ],
       "castShadow": true

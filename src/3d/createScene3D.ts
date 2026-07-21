@@ -103,6 +103,8 @@ export interface Scene3DHandle {
   flyTo?: (targetId: string) => void
   /** 切换主题（仅 interactive:true；SCENE_THEME 用） */
   setTheme?: (mode: 'light' | 'dark') => void
+  /** 复位相机到初始视角（仅 interactive:true；SCENE_RESET_CAMERA 用） */
+  resetCamera?: () => void
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
@@ -170,7 +172,7 @@ export async function createScene3D(
 
   // 8. CSS2D 层尺寸随容器变化（App3D 只管 WebGL canvas 与相机）
   const resizeObserver = new ResizeObserver(() => {
-    cardManager.resize(container.clientWidth, container.clientHeight)
+    cardManager.resize(container.offsetWidth, container.offsetHeight)
   })
   resizeObserver.observe(container)
 
@@ -205,7 +207,20 @@ export async function createScene3D(
   let picker: ScenePicker | undefined
   let flyTo: ((targetId: string) => void) | undefined
   let setTheme: ((mode: 'light' | 'dark') => void) | undefined
+  let resetCamera: (() => void) | undefined
   if (interactive) {
+    // 记录初始视角快照（供 SCENE_RESET_CAMERA 复位）：
+    // position 取相机当前位置（applyLiveDataToApp 已按 config.camera.position 设定）；
+    // target 取 config.camera.lookAt —— 注意 createOrbitControls 不会从 camera.lookAt 推导 target
+    // （OrbitControls.target 默认 (0,0,0)，仅 controlsOpts.target 能覆盖，embed.vue 未传），
+    // 故复位 target 必须显式取 config.lookAt，否则复位后视角看向原点而非场景中心。
+    const initialPosition = app.camera.position.clone()
+    const lookAt = data.camera?.lookAt
+    const initialTarget =
+      Array.isArray(lookAt) && lookAt.length >= 3
+        ? new THREE.Vector3(Number(lookAt[0]), Number(lookAt[1]), Number(lookAt[2]))
+        : controls.target.clone()
+
     picker = new ScenePicker(app.scene, app.camera, canvas)
     app.addUpdateCallback(() => picker!.update())
 
@@ -233,6 +248,13 @@ export async function createScene3D(
     setTheme = (mode: 'light' | 'dark') => {
       app.scene.background = new THREE.Color(mode === 'dark' ? '#1a1a2e' : '#c9ccd6')
     }
+
+    resetCamera = () => {
+      app.camera.position.copy(initialPosition)
+      controls.target.copy(initialTarget)
+      app.camera.lookAt(initialTarget)
+      controls.update()
+    }
   }
 
   let disposed = false
@@ -258,6 +280,7 @@ export async function createScene3D(
     picker,
     flyTo,
     setTheme,
+    resetCamera,
     dispose(): void {
       if (disposed) return
       disposed = true

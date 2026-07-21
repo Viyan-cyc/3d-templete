@@ -10,6 +10,7 @@
  *    SCENE_PICK_GRANULARITY { granularity }           选中粒度 part(部件)|whole(整体)
  *    SCENE_FLY_TO   { targetId: string }              聚焦物体（阶段3）
  *    SCENE_THEME    { mode: 'light'|'dark' }          切主题（阶段3）
+ *    SCENE_RESET_CAMERA —                              复位相机到初始视角
  *    SCENE_PATCH    { objects: {...} }                增量更新（阶段3）
  *
  *  embed → 宿主（子→父）：
@@ -26,7 +27,14 @@ import type { Scene3DHandle } from '../createScene3D'
 
 /** 宿主→embed 的消息载荷类型（阶段0 仅 SCENE_UPDATE 有实质处理） */
 export interface SceneHostMessage {
-  type: 'SCENE_UPDATE' | 'SCENE_PICK_MODE' | 'SCENE_PICK_GRANULARITY' | 'SCENE_FLY_TO' | 'SCENE_THEME' | 'SCENE_PATCH'
+  type:
+    | 'SCENE_UPDATE'
+    | 'SCENE_PICK_MODE'
+    | 'SCENE_PICK_GRANULARITY'
+    | 'SCENE_FLY_TO'
+    | 'SCENE_THEME'
+    | 'SCENE_RESET_CAMERA'
+    | 'SCENE_PATCH'
   payload?: unknown
   enabled?: boolean
   targetId?: string
@@ -51,6 +59,7 @@ export interface PostMessageHostHandlers {
   onPickGranularity?: (mode: 'part' | 'whole') => void
   onFlyTo?: (targetId: string) => void
   onTheme?: (mode: 'light' | 'dark') => void
+  onResetCamera?: () => void
   onPatch?: (patch: unknown) => void
 }
 
@@ -94,6 +103,9 @@ export function bindPostMessageHost(handlers: PostMessageHostHandlers): () => vo
           break
         case 'SCENE_THEME':
           if (data.mode) handlers.onTheme?.(data.mode)
+          break
+        case 'SCENE_RESET_CAMERA':
+          handlers.onResetCamera?.()
           break
         case 'SCENE_PATCH':
           handlers.onPatch?.(data.payload)

@@ -176,6 +176,9 @@ onMounted(() => {
     onTheme: (mode) => {
       handle?.setTheme?.(mode)
     },
+    onResetCamera: () => {
+      handle?.resetCamera?.()
+    },
     onPatch: (patch) => {
       handle?.update(patch as SceneUpdatePatch)
     },
