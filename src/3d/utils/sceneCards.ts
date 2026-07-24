@@ -15,8 +15,8 @@
 
 import * as THREE from 'three'
 import type { Component } from 'vue'
-import { cardComponentRegistry } from '../cards/CardRegistry'
-import type { CardManager } from '../cards/CardManager'
+import { cardComponentRegistry } from '../managers/card/CardRegistry'
+import type { CardManager } from '../managers/card/CardManager'
 import type { CardDef } from '../types'
 
 /** 锚点选取方式 */

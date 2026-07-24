@@ -13,7 +13,7 @@
  */
 
 import * as THREE from 'three'
-import type { CardManager } from '../cards/CardManager'
+import type { CardManager } from '../managers/card/CardManager'
 import type { LiveDataObject } from './liveDataLoader'
 import {
   applyTransform,
@@ -21,6 +21,8 @@ import {
   createLiveMaterial,
   createLiveObject3D,
 } from './liveDataLoader'
+import { componentManager } from '../managers/component/ComponentManager'
+import { sharedState } from '../managers/component/handlers/shared'
 import { scanAndRegisterCards, type CardScanRule } from './sceneCards'
 
 export type ObjectIndex = Map<string, THREE.Object3D>
@@ -40,14 +42,17 @@ export function upsertObjects(
   const created: Array<{ node: THREE.Object3D; parentId: string | null }> = []
 
   // 第一遍：补丁已有 / 创建新的
+  const ctx = { scene, index, shared: sharedState }
   for (const def of defs) {
     const existing = index.get(def.id)
     if (existing) {
-      patchObject(existing, def)
+      // 通过 ComponentManager 分派更新：handler 处理则跳过 default，否则回落 patchObject
+      componentManager.update(existing, def, ctx, patchObject)
       changedNames.push(existing.name || def.id)
       continue
     }
-    const node = createLiveObject3D(def)
+    // 通过 ComponentManager 分派创建：handler 处理则跳过 default，否则回落 createLiveObject3D
+    const node = componentManager.create(def, ctx, createLiveObject3D)
     if (!node) continue
     index.set(def.id, node)
     created.push({ node, parentId: def.parentId ?? null })
@@ -69,13 +74,15 @@ export function upsertObjects(
  * 注意：只处理显式传入的 id；若删的是父节点，其子孙会被 three 一并移除
  * 但不会 dispose，也不会自动清出 index——需要的话请把子孙 id 一并传入。
  */
-export function removeObjects(index: ObjectIndex, ids: string[]): string[] {
+export function removeObjects(scene: THREE.Scene, index: ObjectIndex, ids: string[]): string[] {
   const changedNames: string[] = []
+  const ctx = { scene, index, shared: sharedState }
   for (const id of ids) {
     const obj = index.get(id)
     if (!obj) continue
     changedNames.push(obj.name || id)
-    disposeObject(obj)
+    // 通过 ComponentManager 分派删除：handler 处理则跳过 default，否则回落 disposeObject
+    componentManager.delete(obj, ctx, disposeObject)
     obj.removeFromParent()
     index.delete(id)
   }

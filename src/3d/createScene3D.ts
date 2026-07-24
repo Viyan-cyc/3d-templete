@@ -24,8 +24,8 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { App3D } from './App3D'
-import { CardManager } from './cards/CardManager'
-import type { CardStateCallback } from './cards/CardManager'
+import { CardManager } from './managers/card/CardManager'
+import type { CardStateCallback } from './managers/card/CardManager'
 import { createOrbitControls } from './controls/OrbitControls'
 import {
   applyLiveDataToApp,
@@ -41,6 +41,7 @@ import {
   type ObjectIndex,
 } from './utils/sceneUpdate'
 import { ScenePicker } from './interaction/picker'
+import { registerComponentHandlers, disposeComponentHandlers } from './managers'
 
 export interface Scene3DControlsOptions {
   minDistance?: number
@@ -141,6 +142,9 @@ export async function createScene3D(
 
   // URL 参数优先于 options.debug
   const debug = readDebugFromURL() || options.debug || false
+
+  // 0. 注册业务 handler（幂等：重复调用不会重复注册，只是覆盖）
+  registerComponentHandlers()
 
   // 1. 3D 引擎
   const app = new App3D({ canvas, enableShadows, antialias: true, debug })
@@ -267,7 +271,7 @@ export async function createScene3D(
     update(patch: SceneUpdatePatch): void {
       const changed: string[] = []
       if (patch.objects?.remove?.length) {
-        changed.push(...removeObjects(objectIndex, patch.objects.remove))
+        changed.push(...removeObjects(app.scene, objectIndex, patch.objects.remove))
       }
       if (patch.objects?.upsert?.length) {
         changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert))
@@ -288,6 +292,7 @@ export async function createScene3D(
       resizeObserver.disconnect()
       controls.dispose()
       cardManager.dispose()
+      disposeComponentHandlers()
       app.dispose()
     },
   }

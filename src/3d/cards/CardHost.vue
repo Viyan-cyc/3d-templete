@@ -27,7 +27,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import type { CardState } from './types'
-import { cardComponentRegistry } from './CardRegistry'
+import { cardComponentRegistry } from '../managers/card/CardRegistry'
 
 export interface CardRegistry {
   get(type: string): Component | undefined

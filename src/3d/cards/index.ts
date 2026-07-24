@@ -1,5 +1,2 @@
-export { CardManager } from './CardManager'
 export { default as CardHost } from './CardHost.vue'
-export { cardComponentRegistry } from './CardRegistry'
-export type { CardStateCallback } from './CardManager'
 export type { CardDef, CardState } from './types'

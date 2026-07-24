@@ -17,7 +17,7 @@ import { FontLoader, type Font } from 'three/examples/jsm/loaders/FontLoader.js'
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js'
 import type { App3D } from '../App3D'
 import { ComponentRegistry, AssetPool, registerAllBuilders } from '../components'
-import { loadModel } from '../loaders/ModelLoader'
+import { loadModel } from '../models/loader'
 import { hasComponent, createComponentObject, initLibraryBridge } from '../library/library-bridge'
 
 // 全局组件注册表 + 资源缓存池（组件复用 Geometry/Material，相同参数只创建一次）
@@ -398,6 +398,14 @@ export function createLiveObject3D(
   // sceneUpdate.upsertObjects 新建对象也走本函数，故增量 patch 新增的物体也带 __id。
   if (obj && cfg.id) {
     obj.userData.__id = cfg.id
+  }
+
+  // 标记 component type（component.name > component.type），供 ComponentManager delete/update 分派
+  if (obj) {
+    const componentType = cfg.component?.name ?? cfg.component?.type ?? null
+    if (componentType) {
+      obj.userData.__componentType = componentType
+    }
   }
 
   return obj

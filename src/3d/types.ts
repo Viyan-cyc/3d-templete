@@ -1,9 +1,6 @@
 /**
  * ============================================================
  *  src/3d/types.ts — 3D 模块的核心类型定义
- *
- *  这些类型定义了 initScene() 接收的 JSON 数据结构。
- *  外部调用方按此格式组织数据后传入即可。
  * ============================================================
  */
 
@@ -34,53 +31,15 @@ export interface SceneConfig {
   toneMappingExposure?: number
 }
 
-// ---- 灯光 ----
-
-export type LightType = 'ambient' | 'directional' | 'point' | 'spot'
-
-export interface LightDef {
-  type: LightType
-  color: string
-  intensity: number
-  position?: [number, number, number]
-  castShadow?: boolean
-}
-
-// ---- 模型 / 物体 ----
-
-export type ModelType = 'cube' | 'sphere' | 'plane' | 'gltf' | 'component'
-
-export interface ModelDef {
-  id: string
-  type: ModelType
-  /** 当 type === 'component' 时，指向 ComponentRegistry 中注册的组件名 */
-  componentName?: string
-  /** 当 type === 'gltf' 时，模型文件路径 */
-  filePath?: string
-  /** 位置 [x, y, z] */
-  position?: [number, number, number]
-  /** 旋转 [x, y, z] (弧度) */
-  rotation?: [number, number, number]
-  /** 缩放 [x, y, z] */
-  scale?: [number, number, number]
-  /** 颜色 (hex) */
-  color?: string
-  /** 传递给组件的自定义属性 */
-  props?: Record<string, unknown>
-  /** CSS2D 卡片配置 */
-  card?: CardDef
-}
-
 // ---- CSS2D 卡片 ----
 
 /**
- * JSON 中声明的卡片配置（挂在 ModelDef.card 上）
+ * JSON 中声明的卡片配置
  */
 export interface CardDef {
   /**
    * 卡片类型 —— 决定用哪个 Vue 卡片组件渲染。
    * 与 CardRegistry 中注册的类型名对应，如 'agv'、'container'。
-   * 不填则回退到 ModelDef.componentName → ModelDef.type。
    */
   cardType?: string
   /** 是否常显 */
@@ -105,17 +64,6 @@ export interface CardDef {
   anchor?: Object3D
   /** 透传给 Vue 卡片组件的业务数据 */
   props?: Record<string, unknown>
-}
-
-// ---- 场景数据 (JSON 顶层结构) ----
-
-export interface SceneData {
-  /** 场景配置 */
-  config?: SceneConfig
-  /** 灯光列表 */
-  lights?: LightDef[]
-  /** 模型/物体列表 */
-  models?: ModelDef[]
 }
 
 // ---- 辅助 ----
