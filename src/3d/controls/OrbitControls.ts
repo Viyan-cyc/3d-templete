@@ -21,7 +21,7 @@ export function createOrbitControls(
   controls.enableDamping = options?.enableDamping ?? true
   controls.dampingFactor = options?.dampingFactor ?? 0.08
   controls.minDistance = options?.minDistance ?? 2
-  controls.maxDistance = options?.maxDistance ?? 50
+  controls.maxDistance = options?.maxDistance ?? 1000
   controls.maxPolarAngle = options?.maxPolarAngle ?? Math.PI / 2.1 // 防止穿到地下
 
   if (options?.target) {

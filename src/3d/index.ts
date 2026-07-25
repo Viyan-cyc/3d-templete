@@ -37,6 +37,7 @@ export type {
 // ---- 卡片系统（Vue UI 层）----
 export { CardHost } from './cards'
 export type { CardDef, CardState } from './cards'
+export type { CardScanRule, CardScanGroup, CardAnchorSpec } from './utils/sceneCards'
 
 // ---- 管理器 ----
 export { CardManager, cardComponentRegistry } from './managers/card'
