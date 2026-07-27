@@ -1,7 +1,7 @@
 <template>
   <div class="scene-page">
     <canvas ref="canvasRef" class="scene-canvas"></canvas>
-    <CardHost :cards="cardStates" />
+    <CardHost :cards="cardStates" :registry="cardRegistry" />
 
     <div class="loading-overlay" v-if="loading">
       <div class="spinner"></div>
@@ -22,6 +22,7 @@ import {
   type Scene3DHandle,
   type SceneUpdatePatch,
   type CardState,
+  type CardComponentRegistry,
   type LiveDataConfig,
 } from '@/3d'
 import { bindPostMessageHost, postToParent } from '@/3d/bridge/postMessage-host'
@@ -33,6 +34,7 @@ const loading = ref(true)
 const statusText = ref('等待场景数据...')
 const error = ref('')
 const cardStates = ref<CardState[]>([])
+const cardRegistry = ref<CardComponentRegistry | null>(null)
 let handle: Scene3DHandle | null = null
 let detachBridge: (() => void) | null = null
 /** 最近一次已渲染的 SCENE_UPDATE payload JSON——用于去重。
@@ -109,6 +111,7 @@ async function renderScene(data: LiveDataConfig | null) {
         maxPolarAngle: Math.PI / 2.3,
       },
     })
+    cardRegistry.value = handle.cardManager.registry
     handle.onCardState((states) => {
       cardStates.value = states
     })

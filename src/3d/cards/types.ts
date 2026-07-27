@@ -1,25 +1,23 @@
 /**
  * ============================================================
- *  src/3d/cards/types.ts — 卡片运行时类型
+ *  src/3d/cards/types.ts — 卡片运行时类型（Vue 桥接层）
  *
- *  CardDef (JSON 声明) 定义在 ../types.ts 中。
- *  此文件定义卡片运行时的状态和事件类型。
+ *  CardDef / CardStateCore 定义在 @cyc/3d-components/card 中。
+ *  此文件扩展 CardStateCore，添加 Vue Teleport 所需的 domElement 字段。
  * ============================================================
  */
 
-// 从主类型文件重导出
-export type { CardDef } from '../types'
+import type { CardStateCore as _CardStateCore } from '@cyc/3d-components/card'
+
+// 从库重导出核心类型
+export type { CardDef } from '@cyc/3d-components/card'
+export type { CardStateCore } from '@cyc/3d-components/card'
 
 /**
  * 卡片运行时状态（CardManager 暴露给 Vue 的）
+ *
+ * 继承库的 CardStateCore，添加 domElement 供 CardHost.vue 的 <Teleport :to> 使用。
  */
-export interface CardState {
-  id: string
-  type: string
-  visible: boolean
+export interface CardState extends _CardStateCore {
   domElement: HTMLElement
-  /** 关联的 3D 物体 ID */
-  objectId: string
-  /** 透传的业务 props */
-  props: Record<string, unknown>
 }

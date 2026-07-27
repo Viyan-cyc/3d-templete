@@ -1,7 +1,7 @@
 <template>
   <div class="scene-page">
     <canvas ref="canvasRef" class="scene-canvas"></canvas>
-    <CardHost :cards="cardStates" />
+    <CardHost :cards="cardStates" :registry="cardRegistry" />
 
     <div class="loading-overlay" v-if="loading">
       <div class="spinner"></div>
@@ -21,6 +21,7 @@ import {
   loadLiveDataConfig,
   type Scene3DHandle,
   type CardState,
+  type CardComponentRegistry,
 } from '@/3d'
 import { cardRules } from '@/cards/sceneCardRules'
 
@@ -30,6 +31,7 @@ const loading = ref(true)
 const statusText = ref('加载场景...')
 const error = ref('')
 const cardStates = ref<CardState[]>([])
+const cardRegistry = ref<CardComponentRegistry | null>(null)
 let handle: Scene3DHandle | null = null
 
 // ---- 生命周期 ----
@@ -54,6 +56,7 @@ onMounted(async () => {
         maxPolarAngle: Math.PI / 2.3,
       },
     })
+    cardRegistry.value = handle.cardManager.registry
     handle.onCardState((states) => {
       cardStates.value = states
     })

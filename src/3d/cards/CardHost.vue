@@ -6,8 +6,7 @@
     业务开发只需关注自己的卡片组件怎么写，不需要了解 CSS2D 定位原理。
 
     使用方式：
-    <CardHost :cards="cards" />
-    （registry 默认用全局 cardComponentRegistry，除非你需要独立注册表）
+    <CardHost :cards="cards" :registry="cardManager.registry" />
   -->
   <template v-for="card in cards" :key="card.id">
     <Teleport :to="card.domElement" v-if="card.domElement">
@@ -27,24 +26,23 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 import type { CardState } from './types'
-import { cardComponentRegistry } from '../managers/card/CardRegistry'
 
-export interface CardRegistry {
-  get(type: string): Component | undefined
+/** Minimal registry interface — only requires `get()` */
+interface CardRegistryLike {
+  get(type: string): unknown
 }
 
-const props = withDefaults(
-  defineProps<{
-    /** 卡片状态列表，由 CardManager.onStateChange 提供 */
-    cards: CardState[]
-    /** 卡片类型 → Vue 组件 的注册表，默认用全局 cardComponentRegistry */
-    registry?: CardRegistry
-  }>(),
-  { registry: () => cardComponentRegistry },
-)
+const props = defineProps<{
+  /** 卡片状态列表，由 CardManager.onStateChange 提供 */
+  cards: CardState[]
+  /** CardManager 的实例级注册表，用于解析卡片类型 → Vue 组件 */
+  registry: CardRegistryLike | null
+}>()
 
 function getCardComponent(type: string): Component | undefined {
-  return props.registry.get(type)
+  if (!props.registry) return undefined
+  // 库的 registry 返回 unknown，这里断言为 Vue Component
+  return props.registry.get(type) as Component | undefined
 }
 </script>
 

@@ -6,14 +6,13 @@
  *  - upsert：id 已存在就**就地补丁**（transform / material / geometry），
  *    保留 Object3D 身份，移动/换色不重建、不闪烁；id 不存在才创建并挂父节点。
  *  - remove：按 id 脱离父节点 + dispose 几何/材质 + 移出索引。
- *  - refreshCards：物体增删后，重建受影响的卡片分组（目标/props 按当前场景重算）。
+ *  - refreshCards 已迁至 CardManager.refreshCards() 实例方法。
  *
  *  几何/材质/变换工厂复用自 liveDataLoader，保证增量与初始化逻辑一致。
  * ============================================================
  */
 
 import * as THREE from 'three'
-import type { CardManager } from '../managers/card/CardManager'
 import type { LiveDataObject } from './liveDataLoader'
 import {
   applyTransform,
@@ -23,7 +22,6 @@ import {
 } from './liveDataLoader'
 import { componentManager } from '../managers/component/ComponentManager'
 import { sharedState } from '../managers/component/handlers/shared'
-import { scanAndRegisterCards, type CardScanRule } from './sceneCards'
 
 export type ObjectIndex = Map<string, THREE.Object3D>
 
@@ -87,31 +85,6 @@ export function removeObjects(scene: THREE.Scene, index: ObjectIndex, ids: strin
     index.delete(id)
   }
   return changedNames
-}
-
-/**
- * 物体增删后同步卡片：用各 rule.pattern 在变更 name 上取捕获组 [1] 得到受影响
- * 的卡片分组 id，先 removeCard 再重跑 scanAndRegisterCards（幂等：未受影响的
- * 卡片 addCard 会跳过），让受影响分组按当前场景重建目标与 props。
- */
-export function refreshCards(
-  scene: THREE.Scene,
-  cardManager: CardManager,
-  rules: CardScanRule[],
-  changedNames: string[],
-): void {
-  if (rules.length === 0 || changedNames.length === 0) return
-
-  const affected = new Set<string>()
-  for (const name of changedNames) {
-    for (const rule of rules) {
-      const m = name.match(rule.pattern)
-      if (m) affected.add(m[1] ?? name)
-    }
-  }
-  affected.forEach((id) => cardManager.removeCard(id))
-
-  scanAndRegisterCards(scene, cardManager, rules)
 }
 
 // ---- 内部 ----

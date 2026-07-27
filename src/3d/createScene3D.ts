@@ -24,8 +24,9 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { App3D } from './App3D'
-import { CardManager } from './managers/card/CardManager'
-import type { CardStateCallback } from './managers/card/CardManager'
+import { CardManager } from '@cyc/3d-components/card'
+import type { CardScanRule } from '@cyc/3d-components/card'
+import type { CardState } from './cards/types'
 import { createOrbitControls } from './controls/OrbitControls'
 import {
   applyLiveDataToApp,
@@ -33,9 +34,7 @@ import {
   type LiveDataConfig,
   type LiveDataObject,
 } from './utils/liveDataLoader'
-import { scanAndRegisterCards, type CardScanRule } from './utils/sceneCards'
 import {
-  refreshCards,
   removeObjects,
   upsertObjects,
   type ObjectIndex,
@@ -93,7 +92,7 @@ export interface Scene3DHandle {
   /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
   controls: OrbitControlsInstance
   /** 订阅卡片状态变化，喂给 <CardHost :cards> */
-  onCardState(cb: CardStateCallback): () => void
+  onCardState(cb: (states: CardState[]) => void): () => void
   /** 物体级增量更新（按 id 增删改），自动同步受影响的卡片 */
   update(patch: SceneUpdatePatch): void
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
@@ -162,12 +161,11 @@ export async function createScene3D(
   // 4. OrbitControls（相机替换之后再创建）
   const controls = createOrbitControls(app.camera, canvas, controlsOpts)
 
-  // 5. 卡片系统（CSS2D）—— 相机替换之后再 attach
-  const cardManager = new CardManager()
-  cardManager.attach(container, app.camera, canvas)
+  // 5. 卡片系统（CSS2D）—— 相机替换之后再创建（一步式构造，与库一致）
+  const cardManager = new CardManager({ container, camera: app.camera, canvas })
 
-  // 6. 按业务规则扫描场景、注册卡片
-  scanAndRegisterCards(app.scene, cardManager, cardRules ?? [])
+  // 6. 按业务规则扫描场景、注册卡片（实例方法，组件自动注册到 cardManager.registry）
+  cardManager.scanAndRegisterCards(app.scene, cardRules ?? [])
 
   // 7. 接入 App3D 自有渲染循环（update → WebGL render → CSS2D post-render）
   app.addUpdateCallback(() => controls.update())
@@ -267,7 +265,16 @@ export async function createScene3D(
     app,
     cardManager,
     controls,
-    onCardState: (cb) => cardManager.onStateChange(cb),
+    onCardState: (cb: (states: CardState[]) => void) => {
+      // 桥接：库返回 CardStateCore[]，业务方需要带 domElement 的 CardState[]
+      return cardManager.onStateChange((coreStates) => {
+        const states: CardState[] = coreStates.map(s => ({
+          ...s,
+          domElement: cardManager.getCardDomElement(s.id)!,
+        }))
+        cb(states)
+      })
+    },
     update(patch: SceneUpdatePatch): void {
       const changed: string[] = []
       if (patch.objects?.remove?.length) {
@@ -276,7 +283,7 @@ export async function createScene3D(
       if (patch.objects?.upsert?.length) {
         changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert))
       }
-      refreshCards(app.scene, cardManager, cardRules ?? [], changed)
+      cardManager.refreshCards(app.scene, cardRules ?? [], changed)
     },
     setDebug(mode: boolean): void {
       app.setDebug(mode)
