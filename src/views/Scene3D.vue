@@ -15,15 +15,16 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import type { Component } from 'vue'
 import {
   createScene3D,
-  CardHost,
   loadLiveDataConfig,
   type Scene3DHandle,
   type CardState,
   type CardComponentRegistry,
 } from '@/3d'
-import { cardRules } from '@/cards/sceneCardRules'
+import { CardHost } from '@/adapters/vue'
+import { cardRules } from '@/adapters/vue/sceneCardRules'
 
 // ---- 状态 ----
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -31,7 +32,7 @@ const loading = ref(true)
 const statusText = ref('加载场景...')
 const error = ref('')
 const cardStates = ref<CardState[]>([])
-const cardRegistry = ref<CardComponentRegistry | null>(null)
+const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
 let handle: Scene3DHandle | null = null
 
 // ---- 生命周期 ----
@@ -56,7 +57,7 @@ onMounted(async () => {
         maxPolarAngle: Math.PI / 2.3,
       },
     })
-    cardRegistry.value = handle.cardManager.registry
+    cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
     handle.onCardState((states) => {
       cardStates.value = states
     })

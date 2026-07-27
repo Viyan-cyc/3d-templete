@@ -38,7 +38,7 @@ export interface SceneConfig {
  */
 export interface CardDef {
   /**
-   * 卡片类型 —— 决定用哪个 Vue 卡片组件渲染。
+   * 卡片类型 —— 决定用哪个卡片组件渲染。
    * 与 CardRegistry 中注册的类型名对应，如 'agv'、'container'。
    */
   cardType?: string
@@ -62,7 +62,7 @@ export interface CardDef {
    * CSS2D 层挂在其上、跟随其世界坐标。默认取 addCard 传入的 targets[0]。
    */
   anchor?: Object3D
-  /** 透传给 Vue 卡片组件的业务数据 */
+  /** 透传给卡片组件的业务数据 */
   props?: Record<string, unknown>
 }
 

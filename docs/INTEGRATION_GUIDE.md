@@ -31,19 +31,21 @@
 <template>
   <div ref="container" style="position: relative; width: 100%; height: 100vh;">
     <canvas ref="canvas" style="width: 100%; height: 100%; display: block;" />
-    <CardHost :cards="cardStates" />
+    <CardHost :cards="cardStates" :registry="cardRegistry" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { createScene3D, CardHost, type CardState } from '@/3d'
-import { cardRules } from './sceneCardRules'   // 你定义的卡片规则
+import type { Component } from 'vue'
+import { createScene3D, type CardState, type CardComponentRegistry } from '@/3d'
+import { CardHost } from '@/adapters/vue'
+import { cardRules } from '@/adapters/vue/sceneCardRules'   // 卡片规则（Vue 适配层）
 
 const canvas = ref<HTMLCanvasElement>()
 const container = ref<HTMLDivElement>()
 const cardStates = ref<CardState[]>([])
-
+const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
 let handle: Awaited<ReturnType<typeof createScene3D>> | null = null
 
 onMounted(async () => {
@@ -60,6 +62,7 @@ onMounted(async () => {
   handle.onCardState((states) => {
     cardStates.value = states
   })
+  cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
 })
 
 onUnmounted(() => {
@@ -76,7 +79,7 @@ onUnmounted(() => {
 |------|------|
 | **场景数据** | 一份 JSON，描述场景里有什么物体、长什么样、怎么布局 |
 | **卡片规则** | 一段 TypeScript 代码，描述哪些物体上显示什么 2D 卡片 |
-| **卡片 Vue 组件** | 普通的 Vue 组件，写卡片长什么样、显示什么数据 |
+| **卡片 Vue 组件** | 普通的 Vue 组件，写卡片长什么样、显示什么数据（在 `src/components/cards/` 中） |
 
 ---
 
@@ -107,12 +110,12 @@ onUnmounted(() => {
 
 - **LiveData（JSON 数据）**：描述场景的全部内容——背景、相机、灯光、物体
 - **CardRules（卡片规则）**：描述哪些 3D 物体上需要显示 2D 信息卡片
-- **CardHost（卡片宿主）**：一个 Vue 组件，负责把你的卡片组件渲染到 3D 物体旁边
+- **CardHost（卡片宿主）**：一个组件（Vue 版在 `@/adapters/vue`，React 版在 `@/adapters/react`），负责把你的卡片组件渲染到 3D 物体旁边
 
 ### 2.3 你只关心的两件事
 
 1. **传数据**：构造 LiveDataConfig JSON → 调 `createScene3D` → 场景出现
-2. **写卡片**：写 Vue 组件 + 定义 CardScanRule → 卡片出现在 3D 物体旁边
+2. **写卡片**：写组件 + 定义 CardScanRule → 卡片出现在 3D 物体旁边
 
 ---
 
@@ -458,11 +461,11 @@ onUnmounted(() => {
 
 ### 6.1 卡片是什么
 
-卡片是浮在 3D 物体旁边的 **2D 信息面板**，用普通的 Vue 组件来写。它通过 CSS2D 技术定位在 3D 物体旁边，跟随物体移动。
+卡片是浮在 3D 物体旁边的 **2D 信息面板**，用普通的组件来写（Vue 或 React 均可）。它通过 CSS2D 技术定位在 3D 物体旁边，跟随物体移动。
 
 ```
      ┌──────────────┐
-     │ 🌡️ 温度: 42°C │  ← 这是卡片（你写的 Vue 组件）
+     │ 🌡️ 温度: 42°C │  ← 这是卡片（你写的组件）
      │ 📊 状态: 运行中  │
      └──────┬───────┘
             │
@@ -474,9 +477,9 @@ onUnmounted(() => {
         └───────┘
 ```
 
-### 6.2 第一步：写卡片 Vue 组件
+### 6.2 第一步：写卡片组件
 
-卡片就是一个普通的 Vue 组件，接收 `cardId`、`objectId` 和自定义 props。
+卡片就是一个普通的组件（Vue SFC 或 React 函数组件），接收 `cardId`、`objectId` 和自定义 props。
 
 ```vue
 <!-- DeviceCard.vue -->
@@ -549,16 +552,17 @@ const statusText = computed(() => {
 卡片规则告诉引擎：**哪些物体挂卡片、卡片用什么组件、卡片显示什么数据**。
 
 ```ts
-// sceneCardRules.ts
+// src/adapters/vue/sceneCardRules.ts（Vue 适配层）
+import type { Component } from 'vue'
 import type { CardScanRule } from '@/3d'
-import DeviceCard from './DeviceCard.vue'
-import BuildingCard from './BuildingCard.vue'
+import DeviceCard from '@/components/cards/DeviceCard.vue'
+import BuildingCard from '@/components/cards/BuildingCard.vue'
 
-export const cardRules: CardScanRule[] = [
+export const cardRules: CardScanRule<Component>[] = [
   {
     // ── 匹配规则 ──
     type: 'device',                    // 卡片类型名（自定义，用于注册组件）
-    component: DeviceCard,             // Vue 组件（传入即自动注册，不用手动 register）
+    component: DeviceCard,             // 组件（传入即自动注册，不用手动 register）
     pattern: /^(device\d+)_/,          // 正则匹配物体 id，捕获组 [1] 是分组 id
 
     // ── 位置控制 ──
@@ -902,7 +906,7 @@ window.addEventListener('message', (event) => {
 
 ```ts
 // 卡片规则
-const cardRules: CardScanRule[] = [
+const cardRules: CardScanRule<Component>[] = [
   {
     type: 'rack',
     component: RackCard,
@@ -959,7 +963,7 @@ function createScene3D(
 
 | 参数 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `cardRules` | `CardScanRule[]` | `[]` | 卡片规则 |
+| `cardRules` | `CardScanRule[]` | `[]` | 卡片规则（泛型 `CardScanRule<T>`，适配层指定 `T`） |
 | `container` | `HTMLElement` | `canvas.parentElement` | 卡片 UI 层容器 |
 | `debug` | `boolean` | `false` | 调试面板（也可用 `?debug=true`） |
 | `controls` | `object` | — | 轨道控制配置 |
@@ -981,8 +985,11 @@ function createScene3D(
 
 ### 10.3 CardHost
 
+CardHost 位于适配层（Vue 版在 `@/adapters/vue`，React 版在 `@/adapters/react`）：
+
 ```vue
-<CardHost :cards="cardStates" />
+<!-- Vue -->
+<CardHost :cards="cardStates" :registry="cardRegistry" />
 ```
 
 | Prop | 类型 | 说明 |
@@ -1007,7 +1014,7 @@ interface SceneUpdatePatch {
 
 ### Q: 我不会写 3D，能用这个吗？
 
-**完全可以。** 你只需要写 JSON 数据和 Vue 卡片组件，不需要了解任何 Three.js 知识。3D 渲染完全由引擎处理。
+**完全可以。** 你只需要写 JSON 数据和卡片组件（Vue 或 React 均可），不需要了解任何 Three.js 知识。3D 渲染完全由引擎处理。
 
 ### Q: JSON 中的坐标是什么意思？
 

@@ -32,27 +32,27 @@ interface CardEntry {
 
 /**
  * ============================================================
- *  CardManager — CSS2D 卡片管理器
+ *  CardManager — CSS2D 卡片管理器（框架无关）
  *
  *  职责：
  *  - 为绑定了 CardDef 的 3D 物体创建 CSS2DObject（DOM 定位层）
  *  - 管理卡片的显示/隐藏（单个、按类型、全部）
  *  - 处理 click 交互模式（同组互斥显示）
- *  - 暴露 CardState[] 供 Vue 通过 Teleport 渲染卡片内容
+ *  - 暴露 CardState[] 供 UI 层渲染卡片内容
  *  - scanAndRegisterCards / refreshCards 实例方法
  *  - 场景切换时整体隐藏/恢复
  *  - 销毁时清理 DOM
  *
- *  每个实例有自己的 registry（CardComponentRegistry），
+ *  每个实例有自己的 registry（CardComponentRegistry<T>），
  *  多实例互不干扰。单实例可用 CardManager.defaultRegistry。
  * ============================================================
  */
-export class CardManager {
+export class CardManager<T = unknown> {
   /** 实例级组件注册表 */
-  readonly registry: CardComponentRegistry
+  readonly registry: CardComponentRegistry<T>
 
   /** 全局共享注册表（向后兼容 + 单实例场景） */
-  static readonly defaultRegistry: CardComponentRegistry = cardComponentRegistry
+  static readonly defaultRegistry: CardComponentRegistry<unknown> = cardComponentRegistry
 
   readonly css2DRenderer: CSS2DRenderer
   private _cards: Map<string, CardEntry> = new Map()
@@ -68,7 +68,7 @@ export class CardManager {
   private _frozen: boolean = false
 
   constructor(options: CardManagerOptions) {
-    this.registry = new CardComponentRegistry()
+    this.registry = new CardComponentRegistry<T>()
 
     const { container, camera, canvas, clickThreshold = 5 } = options
     this._camera = camera
@@ -260,7 +260,7 @@ export class CardManager {
     })
   }
 
-  /** 获取当前卡片状态（Vue 用） */
+  /** 获取当前卡片状态（供 UI 层使用） */
   getCardStates(): CardState[] {
     const states: CardState[] = []
     this._cards.forEach((entry) => {
@@ -289,11 +289,11 @@ export class CardManager {
    * 扫描场景，按 rules 把 mesh 分组并注册卡片。
    * 若规则带 component，会自动注册到本实例的 registry。
    */
-  scanAndRegisterCards(scene: THREE.Scene, rules: CardScanRule[]): void {
+  scanAndRegisterCards(scene: THREE.Scene, rules: CardScanRule<T>[]): void {
     if (rules.length === 0) return
 
     for (const rule of rules) {
-      // 自动注册 Vue 组件（声明式：组件随规则一起定义）
+      // 自动注册组件（声明式：组件随规则一起定义）
       if (rule.component !== undefined) {
         this.registry.register(rule.type, rule.component)
       }
@@ -334,7 +334,7 @@ export class CardManager {
    * 物体增删后同步卡片：用各 rule.pattern 在变更 name 上取捕获组 [1] 得到受影响
    * 的卡片分组 id，先 removeCard 再重跑 scanAndRegisterCards（幂等）。
    */
-  refreshCards(scene: THREE.Scene, rules: CardScanRule[], changedNames: string[]): void {
+  refreshCards(scene: THREE.Scene, rules: CardScanRule<T>[], changedNames: string[]): void {
     if (rules.length === 0 || changedNames.length === 0) return
 
     const affected = new Set<string>()

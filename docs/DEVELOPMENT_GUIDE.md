@@ -42,14 +42,19 @@ LiveDataConfig (JSON)  →  liveDataLoader 解析  →  Three.js 场景  →  CS
 
 ```
 src/3d/
-├── index.ts                    # 统一出口，导出所有公共 API
+├── index.ts                    # 统一出口，导出所有公共 API（框架无关）
 ├── createScene3D.ts            # 主入口函数 createScene3D()
 ├── App3D.ts                    # WebGL 渲染引擎封装（renderer/scene/camera/RAF）
 ├── types.ts                    # 核心类型（SceneConfig, CardDef, Vector3Like）
 │
-├── cards/                      # 卡片 UI 层（Vue + CSS2D）
-│   ├── CardHost.vue            # 卡片宿主组件（Teleport 到 CSS2DObject 的 DOM）
-│   └── types.ts                # CardState 运行时类型
+├── cards/                      # 卡片类型（仅 re-export，无 Vue 依赖）
+│   └── types.ts                # CardState / CardDef 类型重导出
+│
+├── adapters/                   # 框架适配层
+│   └── vue/                    # Vue 适配（CardHost、sceneCardRules 等框架特定代码）
+│       ├── CardHost.vue        # 卡片宿主组件（Teleport 到 CSS2DObject 的 DOM）
+│       ├── sceneCardRules.ts   # 业务卡片规则（Vue 组件 + CardScanRule）
+│       └── index.ts            # 适配层出口
 │
 ├── components/                 # 3D 组件：构建器 + 注册表 + 缓存
 │   ├── index.ts                # 统一出口 + registerAllBuilders()
@@ -75,7 +80,7 @@ src/3d/
 ├── managers/                   # 管理器
 │   ├── card/                   # 卡片管理器
 │   │   ├── CardManager.ts      # CSS2D 卡片生命周期 + 交互
-│   │   └── CardRegistry.ts     # Vue 组件 → 卡片类型 的注册表
+│   │   └── CardRegistry.ts     # 卡片组件 → 卡片类型 的注册表（泛型，框架无关）
 │   └── component/              # 业务组件管理器
 │       ├── ComponentManager.ts # 操作×类型 二维分派（create/update/delete）
 │       └── handlers/           # 业务 handler 实现
@@ -113,7 +118,7 @@ src/3d/
 │  ① fetch('/api/scene') → LiveDataConfig JSON                      │
 │  ② cardRules: CardScanRule[]  ← 业务定义哪些物体挂什么卡片           │
 │  ③ const handle = createScene3D(canvas, data, { cardRules })      │
-│  ④ handle.onCardState(cb)   ← 接收卡片状态，喂给 <CardHost>        │
+│  ④ handle.onCardState(cb)   ← 接收卡片状态，喂给 <CardHost>（适配层）│
 │  ⑤ handle.update(patch)     ← 运行时增量更新                       │
 └──────────────────────────────┬─────────────────────────────────────┘
                                │
@@ -610,17 +615,17 @@ JSON 中物体 id  →  CardScanRule.pattern 匹配  →  分组  →  CardManag
                                                             ↓
                                                      CSS2DObject 挂到锚点
                                                             ↓
-                                                     CardState[] → Vue <CardHost>
+                                                     CardState[] → <CardHost>（适配层）
                                                             ↓
                                                      Teleport 到 CSS2DObject 的 DOM
                                                             ↓
                                                      <component :is="cardComponent" v-bind="props" />
 ```
 
-### 9.2 创建新卡片 Vue 组件
+### 9.2 创建新卡片组件
 
 ```vue
-<!-- src/cards/DeviceCard.vue -->
+<!-- src/components/cards/DeviceCard.vue -->
 <template>
   <div class="device-card">
     <h4>{{ name }}</h4>
@@ -658,15 +663,16 @@ defineProps<{
 卡片注册和扫描规则绑定在一起，在 `CardScanRule` 中声明：
 
 ```ts
-// 业务方代码（如 Scene3D.vue 或 sceneCardRules.ts）
+// 业务方代码（如 src/adapters/vue/sceneCardRules.ts）
+import type { Component } from 'vue'
 import { type CardScanRule } from '@/3d'
-import DeviceCard from './cards/DeviceCard.vue'
-import TreeCard from './cards/TreeCard.vue'
+import DeviceCard from '@/components/cards/DeviceCard.vue'
+import TreeCard from '@/components/cards/TreeCard.vue'
 
-export const cardRules: CardScanRule[] = [
+export const cardRules: CardScanRule<Component>[] = [
   {
     type: 'device',                        // 卡片类型名
-    component: DeviceCard,                 // Vue 组件（传入即自动注册，无需手动 register）
+    component: DeviceCard,                 // 组件（传入即自动注册，无需手动 register）
     pattern: /^(device\d+)_/,             // 匹配 mesh.name，捕获组 [1] = 分组 id
     anchor: 'highest',                     // 锚点：取 y 最高的 mesh
     offset: [0, 1.2, 0],                   // 卡片偏移
@@ -694,9 +700,9 @@ export const cardRules: CardScanRule[] = [
 ### 9.4 CardScanRule 详解
 
 ```ts
-interface CardScanRule {
+interface CardScanRule<T = unknown> {
   type: string               // 卡片类型，对应 cardComponentRegistry 中的 key
-  component?: Component      // Vue 组件（传入即自动注册）
+  component?: T              // 组件（传入即自动注册）；泛型 T 由适配层指定
   pattern: RegExp            // 匹配 mesh.name；捕获组 [1] = 分组 id
   anchor?: CardAnchorSpec    // 锚点选取方式
   offset?: [number, number, number]  // 卡片相对锚点偏移，默认 [0, 0.6, 0]
@@ -840,7 +846,7 @@ component.name (3d-components)  >  component.type (内置 builder)  >  src (模�
 | 新 Builder | `builders/xxx/newComponent.ts` + `builders/xxx/index.ts` 注册 |
 | 新 Handler | `handlers/newHandler.ts` + `handlers/index.ts` 注册 |
 | 新模型资产 | `public/models/xxx.glb` + `models/registry.ts` 注册 |
-| 新卡片组件 | 业务方 Vue 组件 + `CardScanRule` 声明 |
+| 新卡片组件 | 业务方组件 + `CardScanRule` 声明（在适配层 `src/adapters/vue/sceneCardRules.ts`） |
 | 新 3d-components 组件 | `@cyc/3d-components` 包内开发，无需改本工程 |
 
 ### 12.4 性能注意

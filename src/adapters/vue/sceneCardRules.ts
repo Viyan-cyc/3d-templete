@@ -1,18 +1,19 @@
 /**
- * 业务侧卡片定义 —— 从 3d 包里迁出的 demo 配置。
+ * 业务侧卡片定义 —— Vue 适配层
  *
  * 一条规则 = 卡片类型 + Vue 组件 + 命名扫描规则 + 锚点 + props，
  * 全部声明在一处。scanAndRegisterCards 会自动注册组件并按 pattern 分组。
  * 换成货架/AGV/光伏等场景时，业务方改这个文件即可。
  */
 
+import type { Component } from 'vue'
 import type { CardScanRule } from '@/3d'
 import InfoCard from '@/components/cards/InfoCard.vue'
 
 const groupHeight = (meshes: { position: { y: number } }[]): number =>
   meshes.reduce((mx, m) => Math.max(mx, m.position.y), 0)
 
-export const cardRules: CardScanRule[] = [
+export const cardRules: CardScanRule<Component>[] = [
   {
     type: 'tree',
     component: InfoCard,

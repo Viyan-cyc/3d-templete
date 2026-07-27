@@ -1,28 +1,31 @@
 /**
  * ============================================================
- *  CardRegistry — Vue 卡片组件注册表
+ *  CardRegistry — 卡片组件注册表（框架无关）
  *
- *  业务开发在此注册卡片类型对应的 Vue 组件。
+ *  业务开发在此注册卡片类型对应的组件（Vue Component / React ComponentType 等）。
  *  每个 CardManager 实例有自己的 registry，多实例互不干扰。
  *  单实例场景可用 CardManager.defaultRegistry（全局共享）。
  *
- *  示例：
+ *  示例（Vue）：
+ *  cardManager.registry.register('cube', ContainerCard)
+ *  cardManager.registry.register('agv', AGVCard)
+ *
+ *  示例（React）：
  *  cardManager.registry.register('cube', ContainerCard)
  *  cardManager.registry.register('agv', AGVCard)
  * ============================================================
  */
-import type { Component } from 'vue'
 
-export class CardComponentRegistry {
-  private _map: Map<string, Component> = new Map()
+export class CardComponentRegistry<T = unknown> {
+  private _map: Map<string, T> = new Map()
 
-  /** 注册卡片类型对应的 Vue 组件 */
-  register(type: string, component: Component): void {
+  /** 注册卡片类型对应的组件 */
+  register(type: string, component: T): void {
     this._map.set(type, component)
   }
 
-  /** 获取卡片类型对应的 Vue 组件 */
-  get(type: string): Component | undefined {
+  /** 获取卡片类型对应的组件 */
+  get(type: string): T | undefined {
     return this._map.get(type)
   }
 

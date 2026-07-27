@@ -1,16 +1,17 @@
 /**
  * ============================================================
- *  src/3d/index.ts — 3D 模块统一入口
+ *  src/3d/index.ts — 3D 模块统一入口（框架无关）
  *
  *  【主入口】createScene3D(canvas, { data, cardRules })
  *    业务方传 live-data JSON + 卡片命名扫描规则即可驱动整个场景。
  *    引擎循环 / PMREM 环境 / OrbitControls / 相机生命周期 /
  *    CSS2D 卡片层 / resize / dispose 全部内置，业务方无需感知 3D 实现。
  *
- *  业务方典型用法（Scene3D.vue）：
+ *  业务方典型用法（Vue 适配层）：
  *  ```ts
- *  import { createScene3D, CardHost, cardComponentRegistry } from '@/3d'
- *  import { cardRules } from '@/cards/sceneCardRules'
+ *  import { createScene3D } from '@/3d'
+ *  import { CardHost } from '@/adapters/vue'
+ *  import { cardRules } from '@/adapters/vue/sceneCardRules'
  *
  *  // cardRules 每条已声明 type + component + 扫描规则，组件会自动注册，无需手动 register
  *  const handle = await createScene3D(canvas, { cardRules })
@@ -32,8 +33,7 @@ export type {
   OrbitControlsInstance,
 } from './createScene3D'
 
-// ---- 卡片系统（Vue UI 层）----
-export { CardHost } from './cards'
+// ---- 卡片系统 ----
 export type { CardDef, CardState } from './cards'
 
 // ---- 管理器 ----

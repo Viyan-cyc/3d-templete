@@ -15,18 +15,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import type { Component } from 'vue'
 import * as THREE from 'three'
 import {
   createScene3D,
-  CardHost,
   type Scene3DHandle,
   type SceneUpdatePatch,
   type CardState,
   type CardComponentRegistry,
   type LiveDataConfig,
 } from '@/3d'
+import { CardHost } from '@/adapters/vue'
 import { bindPostMessageHost, postToParent } from '@/3d/bridge/postMessage-host'
-import { cardRules } from '@/cards/sceneCardRules'
+import { cardRules } from '@/adapters/vue/sceneCardRules'
 
 // ---- 状态 ----
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -34,7 +35,7 @@ const loading = ref(true)
 const statusText = ref('等待场景数据...')
 const error = ref('')
 const cardStates = ref<CardState[]>([])
-const cardRegistry = ref<CardComponentRegistry | null>(null)
+const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
 let handle: Scene3DHandle | null = null
 let detachBridge: (() => void) | null = null
 /** 最近一次已渲染的 SCENE_UPDATE payload JSON——用于去重。
@@ -111,7 +112,7 @@ async function renderScene(data: LiveDataConfig | null) {
         maxPolarAngle: Math.PI / 2.3,
       },
     })
-    cardRegistry.value = handle.cardManager.registry
+    cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
     handle.onCardState((states) => {
       cardStates.value = states
     })
