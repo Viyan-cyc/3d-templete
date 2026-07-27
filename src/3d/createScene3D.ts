@@ -24,9 +24,8 @@
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { App3D } from './App3D'
-import { CardManager } from '@cyc/3d-components/card'
-import type { CardScanRule } from '@cyc/3d-components/card'
-import type { CardState } from './cards/types'
+import { CardManager } from './managers/card/CardManager'
+import type { CardStateCallback, CardScanRule } from './managers/card/types'
 import { createOrbitControls } from './controls/OrbitControls'
 import {
   applyLiveDataToApp,
@@ -70,8 +69,6 @@ export interface Scene3DOptions {
    * 是否为交互预览态（供 octoapp iframe 嵌入）：
    * - false（默认，生产/交付）：不挂 postMessage 桥、不挂 ScenePicker
    * - true（预览/编辑）：由 embed.vue 调用方设 true，桥与 picker 在 embed 侧挂载
-   *
-   * 阶段0 仅作字段透传占位；ScenePicker / pick / flyTo / setTheme 的实际分支在阶段3 补。
    */
   interactive?: boolean
 }
@@ -92,7 +89,7 @@ export interface Scene3DHandle {
   /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
   controls: OrbitControlsInstance
   /** 订阅卡片状态变化，喂给 <CardHost :cards> */
-  onCardState(cb: (states: CardState[]) => void): () => void
+  onCardState(cb: CardStateCallback): () => void
   /** 物体级增量更新（按 id 增删改），自动同步受影响的卡片 */
   update(patch: SceneUpdatePatch): void
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
@@ -122,14 +119,6 @@ function readDebugFromURL(): boolean {
 
 /**
  * 初始化一个完整的 live-data 驱动 3D 场景。
- *
- * @param canvas  调用方的 <canvas>
- * @param data    场景数据（LiveDataConfig，由业务方请求后传入）
- * @param options 其它选项（卡片规则、控制器、调试等）
- *
- * 内部顺序（关键）：数据应用 → 替换相机 → 再创建控制器与卡片层，
- * 确保它们绑定的是最终相机（正交/透视）。
- * GLB 模型异步加载，在同步场景构建完成后自动填充到占位节点。
  */
 export async function createScene3D(
   canvas: HTMLCanvasElement,
@@ -161,7 +150,7 @@ export async function createScene3D(
   // 4. OrbitControls（相机替换之后再创建）
   const controls = createOrbitControls(app.camera, canvas, controlsOpts)
 
-  // 5. 卡片系统（CSS2D）—— 相机替换之后再创建（一步式构造，与库一致）
+  // 5. 卡片系统（CSS2D）—— 一步式构造
   const cardManager = new CardManager({ container, camera: app.camera, canvas })
 
   // 6. 按业务规则扫描场景、注册卡片（实例方法，组件自动注册到 cardManager.registry）
@@ -179,13 +168,11 @@ export async function createScene3D(
   resizeObserver.observe(container)
 
   // 9. 异步加载外部模型（占位节点已在 applyLiveDataToApp 中创建）
-  //     走 ModelLoader provider 链（asset/http/hunyuan）；渲染循环已启动，模型加载完成后自动出现
   loadModelObjects(objectIndex, data.objects).catch((err) => {
     console.error('[createScene3D] 模型加载失败:', err)
   })
 
   // 10. 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update）
-  //     applyLiveDataToApp 已在 userData.__updatable 标记，这里注册到渲染循环
   const updatables: THREE.Object3D[] = []
   app.scene.traverse((obj) => {
     if (obj.userData?.__updatable) updatables.push(obj)
@@ -194,7 +181,7 @@ export async function createScene3D(
     let lastTime = performance.now()
     app.addUpdateCallback(() => {
       const now = performance.now()
-      const delta = Math.min((now - lastTime) / 1000, 0.1) // 秒，封顶 100ms（对齐 IUpdatable 约定）
+      const delta = Math.min((now - lastTime) / 1000, 0.1)
       lastTime = now
       for (const obj of updatables) {
         ;(obj as unknown as { update?: (d: number) => void }).update?.(delta)
@@ -202,20 +189,12 @@ export async function createScene3D(
     })
   }
 
-  // 11. 编辑态拾取器（仅 interactive:true）：构造 ScenePicker，
-  //     挂每帧 update 让选中物的 BoxHelper 高亮跟随移动。
-  //     onPick 回调由 embed.vue 设置（postMessage SCENE_PICK 给宿主）。
-  //     flyTo/setTheme 仅 interactive 时挂载，供 SCENE_FLY_TO / SCENE_THEME 调用。
+  // 11. 编辑态拾取器（仅 interactive:true）
   let picker: ScenePicker | undefined
   let flyTo: ((targetId: string) => void) | undefined
   let setTheme: ((mode: 'light' | 'dark') => void) | undefined
   let resetCamera: (() => void) | undefined
   if (interactive) {
-    // 记录初始视角快照（供 SCENE_RESET_CAMERA 复位）：
-    // position 取相机当前位置（applyLiveDataToApp 已按 config.camera.position 设定）；
-    // target 取 config.camera.lookAt —— 注意 createOrbitControls 不会从 camera.lookAt 推导 target
-    // （OrbitControls.target 默认 (0,0,0)，仅 controlsOpts.target 能覆盖，embed.vue 未传），
-    // 故复位 target 必须显式取 config.lookAt，否则复位后视角看向原点而非场景中心。
     const initialPosition = app.camera.position.clone()
     const lookAt = data.camera?.lookAt
     const initialTarget =
@@ -265,16 +244,7 @@ export async function createScene3D(
     app,
     cardManager,
     controls,
-    onCardState: (cb: (states: CardState[]) => void) => {
-      // 桥接：库返回 CardStateCore[]，业务方需要带 domElement 的 CardState[]
-      return cardManager.onStateChange((coreStates) => {
-        const states: CardState[] = coreStates.map(s => ({
-          ...s,
-          domElement: cardManager.getCardDomElement(s.id)!,
-        }))
-        cb(states)
-      })
-    },
+    onCardState: (cb) => cardManager.onStateChange(cb),
     update(patch: SceneUpdatePatch): void {
       const changed: string[] = []
       if (patch.objects?.remove?.length) {

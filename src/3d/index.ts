@@ -32,14 +32,13 @@ export type {
   OrbitControlsInstance,
 } from './createScene3D'
 
-// ---- 卡片系统（库核心 + Vue UI 桥接层）----
-export { CardManager, CardComponentRegistry, cardComponentRegistry } from '@cyc/3d-components/card'
-export type { CardDef, CardStateCore, CardStateCallback, CardScanRule, CardScanGroup, CardAnchorSpec, CardManagerOptions } from '@cyc/3d-components/card'
-// Vue 桥接
+// ---- 卡片系统（Vue UI 层）----
 export { CardHost } from './cards'
-export type { CardState } from './cards'
+export type { CardDef, CardState } from './cards'
 
 // ---- 管理器 ----
+export { CardManager, CardComponentRegistry, cardComponentRegistry } from './managers/card'
+export type { CardStateCallback, CardManagerOptions, CardScanRule, CardScanGroup, CardAnchorSpec } from './managers/card/types'
 export { ComponentManager, componentManager, registerComponentHandlers } from './managers/component'
 export type { ComponentHandler, ComponentContext } from './managers/component'
 

@@ -18,7 +18,6 @@ export default defineConfig(({ command }) => ({
       // dev 阶段：直接 alias 到 3d-components 源码，无需 build/install。
       // 生产阶段改 package.json dependencies + npm install @cyc/3d-components 后移除这些 alias。
       // 注意：子路径必须排在主路径之前（find 按顺序匹配，长的先匹配避免被主入口截获）
-      { find: '@cyc/3d-components/card', replacement: resolve(__dirname, '../3d-components/src/card/index.ts') },
       { find: '@cyc/3d-components/core', replacement: resolve(__dirname, '../3d-components/src/core/index.ts') },
       { find: '@cyc/3d-components/heat', replacement: resolve(__dirname, '../3d-components/src/heat/index.ts') },
       { find: '@cyc/3d-components/material', replacement: resolve(__dirname, '../3d-components/src/material/index.ts') },

@@ -29,20 +29,19 @@ import type { CardState } from './types'
 
 /** Minimal registry interface — only requires `get()` */
 interface CardRegistryLike {
-  get(type: string): unknown
+  get(type: string): Component | undefined
 }
 
 const props = defineProps<{
   /** 卡片状态列表，由 CardManager.onStateChange 提供 */
   cards: CardState[]
-  /** CardManager 的实例级注册表，用于解析卡片类型 → Vue 组件 */
+  /** CardManager 的实例级注册表 */
   registry: CardRegistryLike | null
 }>()
 
 function getCardComponent(type: string): Component | undefined {
   if (!props.registry) return undefined
-  // 库的 registry 返回 unknown，这里断言为 Vue Component
-  return props.registry.get(type) as Component | undefined
+  return props.registry.get(type)
 }
 </script>
 
