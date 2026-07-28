@@ -13,27 +13,23 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import type { Component } from 'vue'
 import {
   createScene3D,
   loadLiveDataConfig,
-  type Scene3DHandle,
-  type CardState,
-  type CardComponentRegistry,
 } from '@/3d'
 import { CardHost } from '@/adapters/vue'
 import { cardRules } from '@/adapters/vue/sceneCardRules'
 
 // ---- 状态 ----
-const canvasRef = ref<HTMLCanvasElement | null>(null)
+const canvasRef = ref(null)
 const loading = ref(true)
 const statusText = ref('加载场景...')
 const error = ref('')
-const cardStates = ref<CardState[]>([])
-const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
-let handle: Scene3DHandle | null = null
+const cardStates = ref([])
+const cardRegistry = ref(null)
+let handle = null
 
 // ---- 生命周期 ----
 onMounted(async () => {
@@ -45,32 +41,23 @@ onMounted(async () => {
   }
 
   try {
-    // 数据由业务方请求（这里用包提供的可选工具 loadLiveDataConfig；
-    // 生产环境换成你自己的接口即可）
     const data = await loadLiveDataConfig()
 
     handle = await createScene3D(canvas, data, {
       cardRules,
       controls: {
-        // 本场景是正交相机（见 live-data.json），minDistance/maxDistance 对正交无效，
-        // 只有 maxPolarAngle 起作用：防止轨道旋到地面以下。要限制缩放请用 minZoom/maxZoom。
         maxPolarAngle: Math.PI / 2.3,
       },
     })
-    cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
+    cardRegistry.value = handle.cardManager.registry
     handle.onCardState((states) => {
       cardStates.value = states
     })
     loading.value = false
     statusText.value = ''
 
-    // 便于在控制台手动验证增量更新（demo 用，可删）：
-    //   scene3d.update({ objects: { remove: ['tree01_trunk'] } })
-    //   scene3d.update({ objects: { upsert: [{ id:'marker01', parentId:'sceneRoot', type:'mesh',
-    //     geometry:{type:'sphere',params:{radius:1}}, material:{type:'standard',color:'#ff0'},
-    //     position:[0,5,0] }] } })
-    ;(window as unknown as { scene3d?: Scene3DHandle }).scene3d = handle
-  } catch (err: unknown) {
+    window.scene3d = handle
+  } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[Scene3D] 加载失败:', msg)
     error.value = `场景加载失败: ${msg}`

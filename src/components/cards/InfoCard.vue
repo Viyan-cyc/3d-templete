@@ -27,19 +27,19 @@
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { computed } from 'vue'
 
-const props = defineProps<{
-  cardId: string
-  objectId: string
-  kind?: 'tree' | 'building'
-  label?: string
-  position?: [number, number]
-  height?: number
-}>()
+const props = defineProps({
+  cardId: { type: String, required: true },
+  objectId: { type: String, required: true },
+  kind: { type: String, default: '' },
+  label: { type: String, default: '' },
+  position: { type: Array, default: null },
+  height: { type: Number, default: 0 },
+})
 
-const kind = computed<'tree' | 'building'>(() => {
+const kind = computed(() => {
   if (props.kind) return props.kind
   return props.objectId?.startsWith('building') ? 'building' : 'tree'
 })

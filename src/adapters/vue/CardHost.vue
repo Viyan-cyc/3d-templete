@@ -23,23 +23,15 @@
   </template>
 </template>
 
-<script setup lang="ts">
-import type { Component } from 'vue'
-import type { CardState } from '@/3d/managers/card/types'
-
-/** Minimal registry interface — only requires `get()` */
-interface CardRegistryLike {
-  get(type: string): Component | undefined
-}
-
-const props = defineProps<{
+<script setup>
+const props = defineProps({
   /** 卡片状态列表，由 CardManager.onStateChange 提供 */
-  cards: CardState[]
+  cards: { type: Array, required: true },
   /** CardManager 的实例级注册表 */
-  registry: CardRegistryLike | null
-}>()
+  registry: { type: Object, default: null },
+})
 
-function getCardComponent(type: string): Component | undefined {
+function getCardComponent(type) {
   if (!props.registry) return undefined
   return props.registry.get(type)
 }
