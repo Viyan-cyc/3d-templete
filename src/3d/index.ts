@@ -44,6 +44,8 @@ export type { ComponentHandler, ComponentContext } from './managers/component'
 
 // ---- live-data 数据格式（正统数据结构）----
 export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from './utils/liveDataLoader'
+export { registerScenePreset, getScenePresets } from './utils/scenePresets'
+export type { ScenePreset } from './utils/scenePresets'
 export type {
   LiveDataConfig,
   LiveDataCamera,
