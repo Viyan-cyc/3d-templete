@@ -2,6 +2,7 @@ import { createScene3D } from "./createScene3D";
 import { CardManager, CardComponentRegistry, cardComponentRegistry } from "./managers/card";
 import { ComponentManager, componentManager, registerComponentHandlers } from "./managers/component";
 import { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from "./utils/liveDataLoader";
+import { registerScenePreset, getScenePresets } from "./utils/scenePresets";
 import { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents } from "./library/library-bridge";
 import { modelRegistry, resolveModelSrc } from "./models/registry";
 import { loadModel, assetProvider, httpProvider, providers, disposeModelCache } from "./models/loader";
@@ -31,6 +32,7 @@ export {
   createScene3D,
   disposeModelCache,
   getAssetLoader,
+  getScenePresets,
   hasComponent,
   httpProvider,
   hunyuanProvider,
@@ -45,6 +47,7 @@ export {
   normalizeKey,
   registerAllBuilders,
   registerComponentHandlers,
+  registerScenePreset,
   resolveComponent,
   resolveModelSrc
 };

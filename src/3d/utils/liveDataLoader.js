@@ -4,6 +4,7 @@ import { TextGeometry } from "three/examples/jsm/geometries/TextGeometry.js";
 import { ComponentRegistry, AssetPool, registerAllBuilders } from "../components";
 import { loadModel } from "../models/loader";
 import { hasComponent, createComponentObject, initLibraryBridge } from "../library/library-bridge";
+import { mergeWithPreset } from "./scenePresets";
 registerAllBuilders();
 initLibraryBridge();
 const assetPool = new AssetPool();
@@ -30,12 +31,15 @@ async function loadLiveDataConfig(defaultFile = "live-data.json") {
   return config;
 }
 function applyLiveDataToApp(app, config, options) {
-  const { viewSize } = options;
-  if (config.scene.background) {
-    app.scene.background = new THREE.Color(config.scene.background);
+  const { viewSize, preset: presetKey = "dark" } = options;
+  const merged = mergeWithPreset(config, presetKey);
+  const scene = merged.scene;
+  const camCfg = merged.camera;
+  if (scene.background) {
+    app.scene.background = new THREE.Color(scene.background);
   }
-  if (config.scene.fog && config.scene.fog.type === "linear") {
-    const f = config.scene.fog;
+  if (scene.fog && scene.fog.type === "linear") {
+    const f = scene.fog;
     app.scene.fog = new THREE.Fog(f.color, f.near, f.far);
   }
   if (!options.keepExisting) {
@@ -43,7 +47,6 @@ function applyLiveDataToApp(app, config, options) {
       app.scene.remove(app.scene.children[0]);
     }
   }
-  const camCfg = config.camera;
   const aspect = viewSize.width / Math.max(viewSize.height, 1);
   let newCamera;
   if (camCfg.type === "orthographic" && camCfg.orthographic) {
@@ -57,23 +60,21 @@ function applyLiveDataToApp(app, config, options) {
     newCamera = new THREE.PerspectiveCamera(p.fov, aspect, p.near, p.far);
   }
   newCamera.position.set(
-    ...camCfg.position.slice(0, 3)
+    ...Array.isArray(camCfg.position) && camCfg.position.length >= 3 ? camCfg.position.slice(0, 3) : [15, 12, 15]
   );
-  newCamera.lookAt(...camCfg.lookAt.slice(0, 3));
+  newCamera.lookAt(...Array.isArray(camCfg.lookAt) && camCfg.lookAt.length >= 3 ? camCfg.lookAt.slice(0, 3) : [0, 0, 0]);
   newCamera.updateProjectionMatrix();
   app.setCamera(newCamera);
-  if (config.lights) {
-    for (const lc of config.lights) {
-      const light = createLiveLight(lc);
-      if (light) app.scene.add(light);
-    }
+  for (const lc of merged.lights ?? []) {
+    const light = createLiveLight(lc);
+    if (light) app.scene.add(light);
   }
   const nodeMap = /* @__PURE__ */ new Map();
   let createdCount = 0;
   let skippedCount = 0;
   const debug = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "true";
-  if (config.objects) {
-    for (const oc of config.objects) {
+  if (merged.objects) {
+    for (const oc of merged.objects) {
       const node = createLiveObject3D(oc);
       if (node) {
         createdCount++;
@@ -92,7 +93,7 @@ function applyLiveDataToApp(app, config, options) {
         );
       }
     }
-    for (const oc of config.objects) {
+    for (const oc of merged.objects) {
       const node = nodeMap.get(oc.id);
       if (!node) continue;
       if (oc.parentId) {
@@ -108,17 +109,17 @@ function applyLiveDataToApp(app, config, options) {
     }
     {
       const rootIds = /* @__PURE__ */ new Set();
-      for (const o of config.objects) if (!o.parentId) rootIds.add(o.id);
+      for (const o of merged.objects) if (!o.parentId) rootIds.add(o.id);
       const zoneIds = /* @__PURE__ */ new Set();
-      for (const o of config.objects) if (o.__zone) zoneIds.add(o.id);
+      for (const o of merged.objects) if (o.__zone) zoneIds.add(o.id);
       if (zoneIds.size === 0) {
-        for (const o of config.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id);
+        for (const o of merged.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id);
       }
       for (const id of zoneIds) {
         const n = nodeMap.get(id);
         if (n) n.userData.__zone = true;
       }
-      for (const o of config.objects) {
+      for (const o of merged.objects) {
         if (o.parentId && zoneIds.has(o.parentId) && !zoneIds.has(o.id)) {
           const n = nodeMap.get(o.id);
           if (n) n.userData.__logicalRoot = true;
@@ -127,7 +128,7 @@ function applyLiveDataToApp(app, config, options) {
     }
     if (debug) {
       console.log(
-        `[liveDataLoader] \u573A\u666F\u6784\u5EFA\u5B8C\u6210: \u521B\u5EFA ${createdCount}/${config.objects.length} \u7269\u4F53` + (skippedCount > 0 ? `\uFF0C\u8DF3\u8FC7 ${skippedCount} \u4E2A\uFF08\u89C1\u4E0A\u65B9 warn\uFF09` : "")
+        `[liveDataLoader] \u573A\u666F\u6784\u5EFA\u5B8C\u6210: \u521B\u5EFA ${createdCount}/${merged.objects.length} \u7269\u4F53` + (skippedCount > 0 ? `\uFF0C\u8DF3\u8FC7 ${skippedCount} \u4E2A\uFF08\u89C1\u4E0A\u65B9 warn\uFF09` : "")
       );
     }
   }

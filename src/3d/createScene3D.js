@@ -20,7 +20,7 @@ function readDebugFromURL() {
   return val === "true" || val === "1";
 }
 async function createScene3D(canvas, data, options = {}) {
-  const { cardRules, controls: controlsOpts, enableShadows = true, interactive = false } = options;
+  const { cardRules, controls: controlsOpts, enableShadows = true, interactive = false, preset } = options;
   const container = options.container ?? canvas.parentElement ?? document.body;
   const debug = readDebugFromURL() || options.debug || false;
   registerComponentHandlers();
@@ -28,7 +28,8 @@ async function createScene3D(canvas, data, options = {}) {
   const width = canvas.clientWidth || container.clientWidth || 1;
   const height = canvas.clientHeight || container.clientHeight || 1;
   const objectIndex = applyLiveDataToApp(app, data, {
-    viewSize: { width, height }
+    viewSize: { width, height },
+    preset
   });
   applyEnvironment(app, data);
   const controls = createOrbitControls(app.camera, canvas, controlsOpts);
@@ -136,7 +137,7 @@ async function createScene3D(canvas, data, options = {}) {
   };
 }
 function applyEnvironment(app, config) {
-  const env = config.scene.environment;
+  const env = config.scene?.environment;
   const pmrem = new THREE.PMREMGenerator(app.renderer);
   const intensity = env?.intensity;
   app.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
