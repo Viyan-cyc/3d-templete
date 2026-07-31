@@ -19,6 +19,7 @@ import type { App3D } from '../App3D'
 import { ComponentRegistry, AssetPool, registerAllBuilders } from '../components'
 import { loadModel } from '../models/loader'
 import { hasComponent, createComponentObject, initLibraryBridge } from '../library/library-bridge'
+import { mergeWithPreset } from './scenePresets'
 
 // 全局组件注册表 + 资源缓存池（组件复用 Geometry/Material，相同参数只创建一次）
 // ComponentRegistry 是单例实例（非类），registerAllBuilders() 已向其注册所有 builder
@@ -53,23 +54,24 @@ export async function ensureFont(): Promise<void> {
 // ══════════════════════════════════════════════════════════════
 
 export interface LiveDataConfig {
-  version: string
-  angleUnit: string
-  scene: {
+  version?: string
+  angleUnit?: string
+  scene?: {
     background?: string
     environment?: { preset: string; intensity: number }
     fog?: { type: string; color: string; near: number; far: number }
     renderStyle?: string
   }
-  camera: LiveDataCamera
+  camera?: LiveDataCamera
   lights?: LiveDataLight[]
   objects?: LiveDataObject[]
 }
 
 export interface LiveDataCamera {
-  type: 'perspective' | 'orthographic'
-  position: number[]
-  lookAt: number[]
+  /** 相机类型，默认 'perspective'（透视） */
+  type?: 'perspective' | 'orthographic'
+  position?: number[]
+  lookAt?: number[]
   perspective?: { fov: number; near: number; far: number }
   orthographic?: {
     left: number
@@ -193,6 +195,8 @@ export interface ApplyLiveDataOptions {
   viewSize: { width: number; height: number }
   /** 是否保留 app.scene 中已有的物体（默认清空） */
   keepExisting?: boolean
+  /** 场景预设名称，数据缺 scene/camera/lights 时回落到预设配置。默认 'dark' */
+  preset?: string
 }
 
 /**
@@ -210,15 +214,19 @@ export function applyLiveDataToApp(
   config: LiveDataConfig,
   options: ApplyLiveDataOptions,
 ): Map<string, THREE.Object3D> {
-  const { viewSize } = options
+  const { viewSize, preset: presetKey = 'dark' } = options
+
+  const merged = mergeWithPreset(config, presetKey)
+  const scene = merged.scene!
+  const camCfg = merged.camera!
 
   // ── 1. 场景基础 ──
-  if (config.scene.background) {
-    app.scene.background = new THREE.Color(config.scene.background)
+  if (scene.background) {
+    app.scene.background = new THREE.Color(scene.background)
   }
 
-  if (config.scene.fog && config.scene.fog.type === 'linear') {
-    const f = config.scene.fog
+  if (scene.fog && scene.fog.type === 'linear') {
+    const f = scene.fog
     app.scene.fog = new THREE.Fog(f.color, f.near, f.far)
   }
 
@@ -230,7 +238,6 @@ export function applyLiveDataToApp(
   }
 
   // ── 3. 相机替换 ──
-  const camCfg = config.camera
   const aspect = viewSize.width / Math.max(viewSize.height, 1)
   let newCamera: THREE.PerspectiveCamera | THREE.OrthographicCamera
 
@@ -246,20 +253,22 @@ export function applyLiveDataToApp(
   }
 
   newCamera.position.set(
-    ...(camCfg.position.slice(0, 3) as [number, number, number]),
+    ...(Array.isArray(camCfg.position) && camCfg.position.length >= 3
+      ? camCfg.position.slice(0, 3) as [number, number, number]
+      : [15, 12, 15] as [number, number, number]),
   )
-  newCamera.lookAt(...(camCfg.lookAt.slice(0, 3) as [number, number, number]))
+  newCamera.lookAt(...(Array.isArray(camCfg.lookAt) && camCfg.lookAt.length >= 3
+    ? camCfg.lookAt.slice(0, 3) as [number, number, number]
+    : [0, 0, 0] as [number, number, number]))
   newCamera.updateProjectionMatrix()
 
   // 替换 app 上的 camera（通过 setCamera，正交相机 resize 时按 aspect 重算）
   app.setCamera(newCamera)
 
   // ── 4. 灯光 ──
-  if (config.lights) {
-    for (const lc of config.lights) {
-      const light = createLiveLight(lc)
-      if (light) app.scene.add(light)
-    }
+  for (const lc of merged.lights ?? []) {
+    const light = createLiveLight(lc)
+    if (light) app.scene.add(light)
   }
 
   // ── 5. 对象层级树（两遍构建） ──
@@ -268,9 +277,9 @@ export function applyLiveDataToApp(
   let skippedCount = 0
   const debug =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true'
-  if (config.objects) {
+  if (merged.objects) {
     // 第一遍：创建
-    for (const oc of config.objects) {
+    for (const oc of merged.objects) {
       const node = createLiveObject3D(oc)
       if (node) {
         createdCount++
@@ -296,7 +305,7 @@ export function applyLiveDataToApp(
     }
 
     // 第二遍：挂载父节点
-    for (const oc of config.objects) {
+    for (const oc of merged.objects) {
       const node = nodeMap.get(oc.id)
       if (!node) continue
       if (oc.parentId) {
@@ -320,18 +329,18 @@ export function applyLiveDataToApp(
     // 纯 parentId 图计算，不依赖 Three 挂载结果；命中后 ScenePicker whole 模式沿父子链找 __logicalRoot。
     {
       const rootIds = new Set<string>()
-      for (const o of config.objects) if (!o.parentId) rootIds.add(o.id)
+      for (const o of merged.objects) if (!o.parentId) rootIds.add(o.id)
       const zoneIds = new Set<string>()
-      for (const o of config.objects) if (o.__zone) zoneIds.add(o.id)
+      for (const o of merged.objects) if (o.__zone) zoneIds.add(o.id)
       if (zoneIds.size === 0) {
         // 回落：无 __zone 标记的旧场景，用「root 的直接子」启发式
-        for (const o of config.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id)
+        for (const o of merged.objects) if (o.parentId && rootIds.has(o.parentId)) zoneIds.add(o.id)
       }
       for (const id of zoneIds) {
         const n = nodeMap.get(id)
         if (n) n.userData.__zone = true
       }
-      for (const o of config.objects) {
+      for (const o of merged.objects) {
         if (o.parentId && zoneIds.has(o.parentId) && !zoneIds.has(o.id)) {
           const n = nodeMap.get(o.id)
           if (n) n.userData.__logicalRoot = true
@@ -341,7 +350,7 @@ export function applyLiveDataToApp(
 
     if (debug) {
       console.log(
-        `[liveDataLoader] 场景构建完成: 创建 ${createdCount}/${config.objects.length} 物体` +
+        `[liveDataLoader] 场景构建完成: 创建 ${createdCount}/${merged.objects!.length} 物体` +
           (skippedCount > 0 ? `，跳过 ${skippedCount} 个（见上方 warn）` : ''),
       )
     }

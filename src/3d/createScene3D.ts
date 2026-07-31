@@ -71,6 +71,12 @@ export interface Scene3DOptions {
    * - true（预览/编辑）：由 embed.vue 调用方设 true，桥与 picker 在 embed 侧挂载
    */
   interactive?: boolean
+  /**
+   * 场景预设名称，数据缺 scene/camera/lights 时回落到预设配置。
+   * 内置预设: 'dark'（默认）| 'outdoor' | 'industrial' | 'studio'；
+   * 也可通过 registerScenePreset() 注册自定义预设。
+   */
+  preset?: string
 }
 
 /** 物体级增量更新补丁 */
@@ -125,7 +131,7 @@ export async function createScene3D(
   data: LiveDataConfig,
   options: Scene3DOptions = {},
 ): Promise<Scene3DHandle> {
-  const { cardRules, controls: controlsOpts, enableShadows = true, interactive = false } = options
+  const { cardRules, controls: controlsOpts, enableShadows = true, interactive = false, preset } = options
   const container = options.container ?? canvas.parentElement ?? document.body
 
   // URL 参数优先于 options.debug
@@ -142,6 +148,7 @@ export async function createScene3D(
   const height = canvas.clientHeight || container.clientHeight || 1
   const objectIndex: ObjectIndex = applyLiveDataToApp(app, data, {
     viewSize: { width, height },
+    preset,
   })
 
   // 3. IBL 环境光（PMREM）—— physical 材质必需；按 config.scene.environment 驱动
@@ -277,7 +284,7 @@ export async function createScene3D(
 
 /** 根据 live-data 的 scene.environment 配置建立 PMREM 环境光 */
 function applyEnvironment(app: App3D, config: LiveDataConfig): void {
-  const env = config.scene.environment
+  const env = config.scene?.environment
   const pmrem = new THREE.PMREMGenerator(app.renderer)
   // 默认用 RoomEnvironment 作为 IBL；强度由 config 控制
   const intensity = env?.intensity
