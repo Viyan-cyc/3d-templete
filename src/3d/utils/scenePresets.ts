@@ -24,9 +24,9 @@ import type { LiveDataConfig } from './liveDataLoader'
 export interface ScenePreset {
   /** 预设名称（显示/调试用） */
   name: string
-  scene: NonNullable<LiveDataConfig['scene']>
-  camera: NonNullable<LiveDataConfig['camera']>
-  lights: NonNullable<LiveDataConfig['lights']>
+  scene?: NonNullable<LiveDataConfig['scene']>
+  camera?: NonNullable<LiveDataConfig['camera']>
+  lights?: NonNullable<LiveDataConfig['lights']>
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -225,6 +225,30 @@ export function getScenePresets(): Readonly<Record<string, ScenePreset>> {
 }
 
 /**
+ * 合并相机配置：按 type 只保留 perspective 或 orthographic 子字段——二者互斥，不同时存在。
+ * - type 缺省按 'perspective'
+ * - 先 spread（用户值覆盖预设）解析出对应子字段，再剔除另一子字段，避免歧义
+ */
+function mergeCamera(
+  cfgCam: NonNullable<LiveDataConfig['camera']>,
+  presetCam: NonNullable<LiveDataConfig['camera']> | undefined,
+): NonNullable<LiveDataConfig['camera']> {
+  const type = cfgCam.type ?? 'perspective'
+  const merged: NonNullable<LiveDataConfig['camera']> = {
+    ...presetCam,
+    ...cfgCam,
+    type,
+  }
+  // perspective / orthographic 互斥：按 type 删除不相关的子字段
+  if (type === 'orthographic') {
+    delete merged.perspective
+  } else {
+    delete merged.orthographic
+  }
+  return merged
+}
+
+/**
  * 将用户传入的 LiveDataConfig 与指定预设合并。
  * scene / camera / lights 缺失时回落到预设；子字段级合并（用户值覆盖预设）。
  *
@@ -236,30 +260,23 @@ export function getScenePresets(): Readonly<Record<string, ScenePreset>> {
  */
 export function mergeWithPreset(config: LiveDataConfig, presetKey: string): LiveDataConfig {
   const preset = scenePresets[presetKey] ?? scenePresets.dark
+  const pScene = preset.scene
+  const pCamera = preset.camera
+  const pLights = preset.lights
+
   return {
     version: config.version ?? '1.0',
     angleUnit: config.angleUnit ?? 'deg',
     scene: config.scene
       ? {
-          ...preset.scene,
+          ...pScene,
           ...config.scene,
-          fog: config.scene.fog ?? preset.scene.fog,
-          environment: config.scene.environment ?? preset.scene.environment,
+          fog: config.scene.fog ?? pScene?.fog,
+          environment: config.scene.environment ?? pScene?.environment,
         }
-      : { ...preset.scene },
-    camera: config.camera
-      ? {
-          ...preset.camera,
-          ...config.camera,
-          // type 未传或非 orthographic 时一律用 perspective（默认透视相机）
-          type: config.camera.type ?? 'perspective',
-          perspective: config.camera.type === 'orthographic'
-            ? (config.camera.perspective ?? preset.camera.perspective)
-            : (config.camera.perspective ?? preset.camera.perspective),
-          orthographic: config.camera.orthographic ?? preset.camera.orthographic,
-        }
-      : { ...preset.camera },
-    lights: config.lights ?? preset.lights,
+      : { ...pScene },
+    camera: config.camera ? mergeCamera(config.camera, pCamera) : { ...pCamera },
+    lights: config.lights ?? pLights,
     objects: config.objects,
   }
 }

@@ -216,7 +216,6 @@ export function applyLiveDataToApp(
 ): Map<string, THREE.Object3D> {
   const { viewSize, preset: presetKey = 'dark' } = options
 
-  // 与预设合并：缺 scene/camera/lights 时回落到预设配置，保证不报错
   const merged = mergeWithPreset(config, presetKey)
   const scene = merged.scene!
   const camCfg = merged.camera!
@@ -267,7 +266,7 @@ export function applyLiveDataToApp(
   app.setCamera(newCamera)
 
   // ── 4. 灯光 ──
-  for (const lc of merged.lights!) {
+  for (const lc of merged.lights ?? []) {
     const light = createLiveLight(lc)
     if (light) app.scene.add(light)
   }
