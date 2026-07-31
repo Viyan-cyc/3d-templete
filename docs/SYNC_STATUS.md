@@ -4,6 +4,6 @@
 
 | 分支 | 已同步到 main commit | commit 信息 | 同步人 | 同步日期 |
 |------|---------------------|-------------|--------|----------|
-| vue_js | dec5813 | 初始化做兼容 | Tony | 2026-07-28 |
-| react_ts | dec5813 | 初始化做兼容 | Tony | 2026-07-28 |
-| react_js | dec5813 | 初始化做兼容 | Tony | 2026-07-28 |
+| vue_js | 77b2765 | fix bug | Tony | 2026-07-31 |
+| react_ts | 77b2765 | fix bug | Tony | 2026-07-31 |
+| react_js | 77b2765 | fix bug（从 react_ts 新建分支） | Tony | 2026-07-31 |
