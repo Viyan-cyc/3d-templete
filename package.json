@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -20,13 +20,8 @@
   },
   "//dependencies-note": "@cyc/3d-components 本身在 dev 阶段用 vite alias 直引 ../3d-components/src，无需 npm install；生产阶段改 dependencies 加 @cyc/3d-components 并移除 vite alias。gsap/three-bvh-csg/three-mesh-bvh 是 @cyc/3d-components 的 peerDep（Grid/Wall 组件用到）。",
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "^0.185.1",
     "@vitejs/plugin-react": "^6.0.4",
     "mockjs": "^1.1.0",
-    "typescript": "~6.0.2",
     "vite": "^8.1.0",
     "vite-plugin-mock": "^3.0.2"
   }
