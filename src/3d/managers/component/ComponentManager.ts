@@ -17,8 +17,10 @@
 
 import type * as THREE from 'three'
 import type { LiveDataObject } from '../../scene/loader'
-import type { ObjectIndex } from '../../scene/objects'
 import type { ComponentSharedState } from './handlers/base/shared'
+
+/** id → Object3D 索引（物体层 buildObjects/upsertObjects 维护，借 ctx 透传给 handler） */
+export type ObjectIndex = Map<string, THREE.Object3D>
 
 // ── 类型定义 ──
 
@@ -64,15 +66,7 @@ export class ComponentManager {
   }
 
   /**
-   * 从 LiveDataObject 解析业务类型 key。
-   * 优先级：component.name > component.type（盖 __componentType 用，与原实现一致）。
-   */
-  resolveType(data: LiveDataObject): string | null {
-    return data.component?.name ?? data.component?.type ?? null
-  }
-
-  /**
-   * 从 Object3D 的 userData 读取创建时存的 component type（供 delete 使用）。
+   * 从 Object3D 的 userData 读取创建时存的 handler key（供 delete 分派使用）。
    * delete 阶段没有 LiveDataObject，只有 id 列表，因此依赖创建时写入的标记。
    */
   resolveTypeFromObj(obj: THREE.Object3D): string | null {
@@ -81,7 +75,8 @@ export class ComponentManager {
 
   /**
    * 分派创建：按 kind 链优先级遍历，首个 match 且 create 返回非 null 者胜出（null 则回落下一项）。
-   * 创建成功后自动盖 userData.__id（data.id）与 __componentType（resolveType）。
+   * 创建成功后自动盖 userData.__id（data.id）与 __componentType（创建它的 chain entry 的 key，
+   * 供 delete 按 key 反查 handler）。
    */
   create(data: LiveDataObject, ctx: ComponentContext): THREE.Object3D | null {
     for (const entry of this._chain) {
@@ -89,8 +84,7 @@ export class ComponentManager {
       const result = entry.handler.create?.(data, ctx) ?? null
       if (result) {
         if (data.id) result.userData.__id = data.id
-        const stamp = this.resolveType(data)
-        if (stamp) result.userData.__componentType = stamp
+        result.userData.__componentType = entry.key
         return result
       }
       // handler 返回 null → 继续 kind 链下一项
@@ -124,16 +118,6 @@ export class ComponentManager {
     const entry = key ? this._chain.find((e) => e.key === key) : undefined
     if (entry?.handler.delete?.(obj, ctx)) return
     defaultFn(obj)
-  }
-
-  /** 是否已注册某 key */
-  has(key: string): boolean {
-    return this._chain.some((e) => e.key === key)
-  }
-
-  /** 列出所有已注册的 key（调试用） */
-  list(): string[] {
-    return this._chain.map((e) => e.key)
   }
 }
 

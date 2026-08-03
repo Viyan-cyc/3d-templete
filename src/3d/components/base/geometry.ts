@@ -1,7 +1,7 @@
 /**
  * geometry — 按 geoDef.type 创建 BufferGeometry（8 种基础几何体）
  *
- * 从 liveDataLoader.createLiveGeometry 迁入。供 primitive 组件与 sceneUpdate.patchObject 复用。
+ * 从原 liveDataLoader.createLiveGeometry 拆出。供 primitive 组件与 scene/objects.ts 的 patchObject 复用。
  * 契约：返回 BufferGeometry | null。text 不在此（text 在 TextComponent 单独处理，返回完整 Mesh），
  * 故 patch 路径遇 text 返回 null 跳过，行为与原实现一致。
  */

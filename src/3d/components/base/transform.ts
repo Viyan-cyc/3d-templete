@@ -1,7 +1,7 @@
 /**
  * transform — Object3D 变换 / 阴影 / 三元组解析工具（组件层共享）
  *
- * 从 liveDataLoader 迁入。组件构造时用 applyTransform / applyShadow 应用 data 里的
+ * 从原 liveDataLoader 拆出。组件构造时用 applyTransform / applyShadow 应用 data 里的
  * position/rotation/scale/阴影；patchObject 也复用。
  */
 import * as THREE from 'three'

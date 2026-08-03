@@ -16,8 +16,8 @@ export { AssetPool } from './AssetPool'
 export * from './base'
 
 // ---- npm 组件桥（library-bridge）----
-import { initLibraryBridge, hasComponent, resolveComponent, createComponentObject, listComponents } from './library-bridge'
-export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents }
+import { initLibraryBridge, hasComponent, resolveComponent, createComponentObject } from './library-bridge'
+export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge }
 
 /**
  * 注册类组件所需的底层初始化：3d-components 桥（Wall/Grid…）。幂等。

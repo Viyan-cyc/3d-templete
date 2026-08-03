@@ -11,7 +11,6 @@
 import type { App3D } from '../App3D'
 import type { LiveDataConfig, ApplyLiveDataOptions } from './loader'
 import { mergeWithPreset } from './presets'
-import { sharedState } from '../managers/component/handlers/base/shared'
 import { applyEnvironment } from './environment'
 import { buildObjects, type ObjectIndex } from './objects'
 
@@ -26,7 +25,7 @@ export type {
   LiveDataMaterial,
   ApplyLiveDataOptions,
 } from './loader'
-export { buildObjects, upsertObjects, removeObjects, loadModelObjects, loadGlbObjects } from './objects'
+export { buildObjects, upsertObjects, removeObjects, loadModelObjects } from './objects'
 export type { ObjectIndex } from './objects'
 export { registerScenePreset, getScenePresets } from './presets'
 export type { ScenePreset } from './presets'
@@ -46,5 +45,5 @@ export function applyLiveDataToApp(
   const { viewSize, preset: presetKey = 'dark' } = options
   const merged = mergeWithPreset(config, presetKey)
   applyEnvironment(app, merged, viewSize, options.keepExisting)
-  return buildObjects(app.scene, merged.objects ?? [], sharedState)
+  return buildObjects(app.scene, merged.objects ?? [])
 }

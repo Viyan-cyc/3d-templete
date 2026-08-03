@@ -43,7 +43,7 @@ export { ComponentManager, componentManager, registerComponentHandlers } from '.
 export type { ComponentHandler, ComponentContext } from './managers/component'
 
 // ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from './scene'
+export { loadLiveDataConfig, applyLiveDataToApp, loadModelObjects } from './scene'
 export { registerScenePreset, getScenePresets } from './scene'
 export type { ScenePreset } from './scene'
 export type {
@@ -57,7 +57,7 @@ export type {
 } from './scene'
 
 // ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
-export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents } from './components'
+export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge } from './components'
 
 // ---- 模型资产 + 加载 + 混元生成 ----
 export { modelRegistry, resolveModelSrc } from './models/registry'

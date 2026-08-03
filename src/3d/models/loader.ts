@@ -5,7 +5,7 @@
  *  按 src 前缀路由到不同 provider，顺序即优先级：
  *    assetProvider  (^asset:)   → 本地 modelRegistry + GLTFLoader
  *    httpProvider    (^https?:/) → 远程 + 按扩展名选 loader（阶段1 只 GLTF）
- *    hunyuanProvider (^hunyuan:) → 混元单次生成缓存（占位 throw，见 hunyuan-provider.ts）
+ *    hunyuanProvider (^hunyuan:) → 混元单次生成缓存（占位 throw，见 hunyuan.ts）
  *
  *  所有 provider 返回 THREE.Object3D，内置原型缓存 + clone(true) 多实例复用。
  *  详见 3D_PAGE_DESIGN.md §1.5。

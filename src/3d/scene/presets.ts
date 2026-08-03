@@ -266,7 +266,6 @@ export function mergeWithPreset(config: LiveDataConfig, presetKey: string): Live
 
   return {
     version: config.version ?? '1.0',
-    angleUnit: config.angleUnit ?? 'deg',
     scene: config.scene
       ? {
           ...pScene,

@@ -6,7 +6,6 @@
 
 export interface LiveDataConfig {
   version?: string
-  angleUnit?: string
   scene?: {
     background?: string
     environment?: { preset: string; intensity: number }

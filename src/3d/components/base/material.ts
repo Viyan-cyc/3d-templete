@@ -1,7 +1,7 @@
 /**
  * material — 材质工厂（带 AssetPool 缓存）
  *
- * 从 liveDataLoader 迁入。供 primitive / builder / text 等组件与 sceneUpdate.patchObject 复用。
+ * 从原 liveDataLoader 拆出。供 primitive / text 等组件与 scene/objects.ts 的 patchObject 复用。
  * 内部 switch（standard/phong/basic/physical）保持不拆——材质是多类组件复用的通用逻辑。
  */
 import * as THREE from 'three'
@@ -13,7 +13,11 @@ function materialKey(matDef: LiveDataMaterial): string {
   const parts = [matDef.type, matDef.color ?? '#fff', String(matDef.roughness ?? ''), String(matDef.metalness ?? '')]
   if (matDef.transmission !== undefined) parts.push(`tm:${matDef.transmission}`)
   if (matDef.clearcoat !== undefined) parts.push(`cc:${matDef.clearcoat}`)
+  if (matDef.clearcoatRoughness !== undefined) parts.push(`cr:${matDef.clearcoatRoughness}`)
   if (matDef.ior !== undefined) parts.push(`ior:${matDef.ior}`)
+  if (matDef.thickness !== undefined) parts.push(`th:${matDef.thickness}`)
+  if (matDef.sheen !== undefined) parts.push(`sh:${matDef.sheen}`)
+  if (matDef.sheenColor !== undefined) parts.push(`sc:${matDef.sheenColor}`)
   if (matDef.transparent) parts.push('tr')
   if (matDef.opacity !== undefined) parts.push(`op:${matDef.opacity}`)
   return parts.join('|')

@@ -203,24 +203,12 @@ export class App3D {
     this._updateCallbacks.push(fn)
   }
 
-  /** 移除更新回调 */
-  removeUpdateCallback(fn: () => void): void {
-    const idx = this._updateCallbacks.indexOf(fn)
-    if (idx !== -1) this._updateCallbacks.splice(idx, 1)
-  }
-
   /**
    * 注册后渲染回调（在 WebGLRenderer.render 之后执行）
    * 用于 CSS2DRenderer 等需要覆盖在 3D 之上的渲染
    */
   addPostRenderCallback(fn: () => void): void {
     this._postRenderCallbacks.push(fn)
-  }
-
-  /** 移除后渲染回调 */
-  removePostRenderCallback(fn: () => void): void {
-    const idx = this._postRenderCallbacks.indexOf(fn)
-    if (idx !== -1) this._postRenderCallbacks.splice(idx, 1)
   }
 
   /**

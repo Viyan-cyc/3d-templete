@@ -19,7 +19,7 @@
 |------|--------------|--------|
 | 1 | 场景数据 JSON（几何/灯光/相机） | 后端接口 或 `public/*.json` |
 | 2 | 卡片 Vue 组件（纯样式） | `src/components/cards/*.vue` |
-| 3 | 卡片规则 `cardRules`（物体→卡片） | `src/cards/*.ts` |
+| 3 | 卡片规则 `cardRules`（物体→卡片） | `src/adapters/vue/sceneCardRules.ts` |
 | 4 | 一个入口页（canvas + 一行调用） | `src/views/*.vue` |
 
 下面逐步展开。
@@ -46,7 +46,6 @@ const handle = createScene3D(canvas, data, { cardRules })
 ```jsonc
 {
   "version": "1",
-  "angleUnit": "degree",          // rotation 字段按角度还是弧度
   "scene": {
     "background": "#87CEEB",       // 背景色
     "environment": { "preset": "studio", "intensity": 1 }, // IBL 环境光强度
@@ -119,7 +118,7 @@ defineProps<{ label?: string; occupancy?: number }>()
 这是**唯一需要你写「映射逻辑」的地方**：告诉包「哪些物体挂哪种卡片、锚点取哪、卡片显示什么」。
 
 ```ts
-// src/cards/sceneCardRules.ts
+// src/adapters/vue/sceneCardRules.ts
 import type { CardScanRule } from '@/3d'
 import BuildingCard from '@/components/cards/BuildingCard.vue'
 
@@ -191,8 +190,9 @@ export const cardRules: CardScanRule[] = [
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { createScene3D, CardHost, loadLiveDataConfig, type CardState } from '@/3d'
-import { cardRules } from '@/cards/sceneCardRules'
+import { createScene3D, loadLiveDataConfig, type CardState } from '@/3d'
+import { CardHost } from '@/adapters/vue'
+import { cardRules } from '@/adapters/vue/sceneCardRules'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const cardStates = ref<CardState[]>([])
@@ -256,7 +256,7 @@ handle.update({
 | `cardRules?: CardScanRule[]` | 卡片规则 |
 | `container?: HTMLElement` | 卡片层挂载容器，默认 `canvas.parentElement` |
 | `controls?: { minDistance?, maxDistance?, maxPolarAngle?, target? }` | OrbitControls 配置 |
-| `debug?: boolean` | 显示网格/坐标轴，默认 `false` |
+| `debug?: boolean` | 显示调试 HUD 面板（FPS/calls/triangles），默认 `false` |
 | `enableShadows?: boolean` | 阴影开关，默认 `true` |
 
 ### `Scene3DHandle`

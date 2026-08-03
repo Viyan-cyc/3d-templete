@@ -62,11 +62,11 @@ npm install three
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
   createScene3D,
-  CardHost,
   type Scene3DHandle,
   type CardState,
 } from '@/3d'
-import { cardRules } from '@/cards/sceneCardRules'  // 你的卡片规则
+import { CardHost } from '@/adapters/vue'
+import { cardRules } from '@/adapters/vue/sceneCardRules'  // 你的卡片规则
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const cardStates = ref<CardState[]>([])
@@ -106,7 +106,6 @@ onUnmounted(() => {
 ```jsonc
 {
   "version": "1.0",
-  "angleUnit": "degree",          // "degree" 或 "radian"，控制旋转字段单位
   "scene": { /* 场景环境 */ },
   "camera": { /* 相机 */ },
   "lights": [ /* 灯光数组 */ ],
@@ -256,8 +255,8 @@ onUnmounted(() => {
   "parentId": "warehouseZone",
   "position": [2, 0, 5],
   "component": {
-    "type": "rack",                    // 已注册的组件 builder 名称
-    "params": { "rows": 4, "columns": 3, "levels": 5 }
+    "type": "rack",                    // 已注册的组件类型名称
+    "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 }
   },
   "material": {
     "type": "standard",
@@ -274,7 +273,7 @@ onUnmounted(() => {
 | `box` | `width`, `height`, `depth` |
 | `plane` | `width`, `height` |
 | `sphere` | `radius`, `widthSegments`, `heightSegments` |
-| `cylinder` | `radiusTop`, `radiusBottom`, `height`, `radialSegments`, `radialSegments` |
+| `cylinder` | `radiusTop`, `radiusBottom`, `height`, `radialSegments` |
 | `cone` | `radius`, `height`, `radialSegments` |
 | `torus` | `innerRadius`, `outerRadius`, `radialSegments`, `thetaSegments`, `arc` |
 | `circle` | `radius`, `segments` |
@@ -296,25 +295,11 @@ onUnmounted(() => {
 
 以下组件可通过 `type: "component"` 直接使用：
 
-| 类别 | 组件 type | 说明 |
-|------|----------|------|
-| 仓储 | `rack` | 货架 |
-| 仓储 | `bookshelf` | 书架 |
-| 仓储 | `showcase` | 展示柜 |
-| 仓储 | `pallet` | 托盘 |
-| 仓储 | `bin` | 料箱 |
-| 工业 | `cnc-machine` | 数控机床 |
-| 工业 | `conveyor` | 传送带 |
-| 工业 | `press` | 冲压机 |
-| 工业 | `robot-arm` | 机械臂 |
-| 港口 | `container` | 集装箱 |
-| 港口 | `crane` | 起重机 |
-| 港口 | `dock` | 码头 |
-| 港口 | `forklift` | 叉车 |
-| 通用 | `cabinet` | 机柜 |
-| 通用 | `desk` | 桌子 |
-| 通用 | `partition` | 隔断 |
-| 通用 | `signage` | 标识牌 |
+| 类别 | 组件 type | 说明 | params |
+|------|----------|------|--------|
+| 仓储 | `rack` | 货架 | `levels`, `width`, `height`, `depth` |
+
+> 当前仅 `rack` 有实现，其余组件待补充。
 
 ---
 
@@ -376,7 +361,7 @@ defineProps<{
 扫描规则定义了「哪些 3D 物体挂什么卡片、卡片显示在哪、传什么数据」：
 
 ```ts
-// cards/sceneCardRules.ts
+// adapters/vue/sceneCardRules.ts
 import type { CardScanRule } from '@/3d'
 import MyCard from '@/components/cards/MyCard.vue'
 
@@ -510,7 +495,7 @@ interface Scene3DOptions {
   /** CSS2D 卡片层挂载容器，默认 canvas.parentElement */
   container?: HTMLElement
 
-  /** 是否显示 grid/axes 调试辅助，默认 false */
+  /** 是否显示调试 HUD 面板（FPS/calls/triangles），默认 false */
   debug?: boolean
 
   /** OrbitControls 配置 */
@@ -643,11 +628,11 @@ handle.update({
 import { ref, onMounted, onUnmounted } from 'vue'
 import {
   createScene3D,
-  CardHost,
   type Scene3DHandle,
   type CardState,
 } from '@/3d'
-import { cardRules } from '@/cards/sceneCardRules'
+import { CardHost } from '@/adapters/vue'
+import { cardRules } from '@/adapters/vue/sceneCardRules'
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const loading = ref(true)
@@ -759,7 +744,7 @@ const height = computed(() => props.height ?? 0)
 ### 7.3 卡片扫描规则
 
 ```ts
-// cards/sceneCardRules.ts
+// adapters/vue/sceneCardRules.ts
 import type { CardScanRule } from '@/3d'
 import InfoCard from '@/components/cards/InfoCard.vue'
 
@@ -836,7 +821,7 @@ handle.cardManager.unfreeze()
 
 ```ts
 const handle = createScene3D(canvas, data, {
-  debug: true,  // 显示网格和坐标轴辅助线
+  debug: true,  // 显示调试 HUD 面板（FPS/calls/triangles）
 })
 ```
 

@@ -8,7 +8,7 @@
  *  职责：
  *  - enable/disable：仅在编辑态挂 pointerdown/pointerup 监听（与 OrbitControls 共存）。
  *  - 点击（pointerdown→pointerup 拖动 <5px 视为点击）→ raycast 命中场景物体。
- *  - 命中后沿父子链向上查 userData.__id（liveDataLoader 写入）拿到所属 object id。
+ *  - 命中后沿父子链向上查 userData.__id（ComponentManager.create 写入）拿到所属 object id。
  *  - 高亮选中物（THREE.BoxHelper 包围盒，每帧 update 跟随移动）。
  *
  *  与运行态（CSS2D 卡片点击）的区分：本模块只在编辑态（interactive + SCENE_PICK_MODE
@@ -110,7 +110,7 @@ export class ScenePicker {
     const hits = this.ray.intersectObjects(this.scene.children, true)
 
     for (const hit of hits) {
-      // 沿父子链向上找 userData.__id（liveDataLoader 写入于每个 object 根节点）
+      // 沿父子链向上找 userData.__id（ComponentManager.create 写入于每个 object 根节点）
       let firstIdObj: THREE.Object3D | null = null
       let firstId = ''
       let cur: THREE.Object3D | null = hit.object

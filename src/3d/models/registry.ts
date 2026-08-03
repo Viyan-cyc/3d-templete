@@ -3,7 +3,7 @@
  *  src/3d/models/registry.ts — 3D 模型资源注册表
  *
  *  通过 Vite 的 ?url import 将 .glb/.gltf 文件编译为静态资源 URL，
- *  供 liveDataLoader 中 type='glb' 的对象引用。
+ *  供 type='glb' 的对象引用（经 scene/objects.ts 的 loadModelObjects 加载）。
  *
  *  用法（live-data.json 中）：
  *    { "type": "glb", "src": "windmill", ... }
@@ -21,7 +21,7 @@ import windmillUrl from './windmill.glb?url'
 /**
  * 模型注册表：key 为 live-data.json 中可引用的名称，value 为编译后的 URL。
  *
- * liveDataLoader 在处理 type='glb' 的对象时，会查找此注册表：
+ * loadModelObjects（scene/objects.ts）在处理 type='glb' 的对象时，会查找此注册表：
  *   - src 以 'asset:' 开头 → 去掉前缀后在本表查找
  *   - 否则视为原始 URL 路径（如 '/models/xxx.glb'）
  */

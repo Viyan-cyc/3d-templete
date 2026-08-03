@@ -23,8 +23,6 @@
  * ============================================================
  */
 
-import type { Scene3DHandle } from '../createScene3D'
-
 /** 宿主→embed 的消息载荷类型（阶段0 仅 SCENE_UPDATE 有实质处理） */
 export interface SceneHostMessage {
   type:
@@ -123,14 +121,4 @@ export function bindPostMessageHost(handlers: PostMessageHostHandlers): () => vo
 
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)
-}
-
-/**
- * 便捷：把 Scene3DHandle 的增量更新桥接为 SCENE_PATCH 处理器（阶段3 用）。
- * 阶段0 暂不使用，留作阶段3 onPatch 的实现参考。
- */
-export function patchHandlerFromHandle(handle: Scene3DHandle) {
-  return (patch: unknown) => {
-    handle.update(patch as Parameters<Scene3DHandle['update']>[0])
-  }
 }

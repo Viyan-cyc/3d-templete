@@ -100,9 +100,3 @@ export function createComponentObject(
     return null
   }
 }
-
-/** 列出所有已注册组件名（调试用） */
-export function listComponents(): string[] {
-  if (!initialized) initLibraryBridge()
-  return Array.from(registry.keys())
-}
