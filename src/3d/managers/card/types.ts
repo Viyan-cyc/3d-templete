@@ -7,8 +7,39 @@
 import type { Object3D, Camera } from 'three'
 
 // ---- Card Definition (JSON 配置级) ----
-// CardDef 的唯一定义在 src/3d/types.ts，此处 re-export 保持向后兼容。
-export type { CardDef } from '../../types'
+
+/**
+ * JSON 中声明的卡片配置
+ */
+export interface CardDef {
+  /**
+   * 卡片类型 —— 决定用哪个卡片组件渲染。
+   * 与 CardRegistry 中注册的类型名对应，如 'agv'、'container'。
+   */
+  cardType?: string
+  /** 是否常显 */
+  alwaysVisible?: boolean
+  /**
+   * 交互模式：
+   * - 'always' : 始终显示
+   * - 'click'  : 点击物体后显示/隐藏（同 interactiveGroup 内互斥）
+   */
+  mode?: 'always' | 'click'
+  /**
+   * 交互分组。mode='click' 时，同一分组内同时只显示一个卡片。
+   * 默认使用 type 字段（即 CardHost 中注册的卡片类型名）作为分组。
+   */
+  interactiveGroup?: string
+  /** 物体上方偏移 [x, y, z]，默认 [0, 1.5, 0] */
+  offset?: [number, number, number]
+  /**
+   * 卡片定位锚点（运行时注入，非 JSON 序列化字段）。
+   * CSS2D 层挂在其上、跟随其世界坐标。默认取 addCard 传入的 targets[0]。
+   */
+  anchor?: Object3D
+  /** 透传给卡片组件的业务数据 */
+  props?: Record<string, unknown>
+}
 
 // ---- Card State (运行时) ----
 

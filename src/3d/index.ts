@@ -34,7 +34,7 @@ export type {
 } from './createScene3D'
 
 // ---- 卡片系统 ----
-export type { CardDef, CardState } from './cards'
+export type { CardDef, CardState } from './managers/card/types'
 
 // ---- 管理器 ----
 export { CardManager, CardComponentRegistry, cardComponentRegistry } from './managers/card'
@@ -43,9 +43,9 @@ export { ComponentManager, componentManager, registerComponentHandlers } from '.
 export type { ComponentHandler, ComponentContext } from './managers/component'
 
 // ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from './utils/liveDataLoader'
-export { registerScenePreset, getScenePresets } from './utils/scenePresets'
-export type { ScenePreset } from './utils/scenePresets'
+export { loadLiveDataConfig, applyLiveDataToApp, loadGlbObjects, loadModelObjects } from './scene'
+export { registerScenePreset, getScenePresets } from './scene'
+export type { ScenePreset } from './scene'
 export type {
   LiveDataConfig,
   LiveDataCamera,
@@ -54,10 +54,10 @@ export type {
   LiveDataGeometry,
   LiveDataMaterial,
   ApplyLiveDataOptions,
-} from './utils/liveDataLoader'
+} from './scene'
 
 // ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
-export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents } from './library/library-bridge'
+export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge, listComponents } from './components'
 
 // ---- 模型资产 + 加载 + 混元生成 ----
 export { modelRegistry, resolveModelSrc } from './models/registry'
@@ -69,9 +69,8 @@ export { hunyuanProvider, normalizeKey } from './models/hunyuan'
 export { ScenePicker } from './interaction/picker'
 export type { PickInfo } from './interaction/picker'
 
-// ---- 3D 组件：构建器 + 注册表 + 缓存 ----
-export { ComponentRegistry, AssetPool, Shelf, SolarPanel, registerAllBuilders } from './components'
-export type { ComponentCtor, ComponentBuilder, ShelfOptions, ShelfCellCoord, SolarPanelOptions } from './components'
+// ---- 3D 组件：缓存 ----
+export { AssetPool } from './components'
 
 // ---- 基础设施 ----
 export { App3D } from './App3D'
@@ -79,4 +78,4 @@ export { DebugOverlay } from './debug'
 export { AssetLoader, getAssetLoader } from './loaders/AssetLoader'
 export type { App3DOptions } from './App3D'
 export type { DebugOverlayOptions } from './debug'
-export type { SceneConfig } from './types'
+export type { SceneConfig } from './App3D'

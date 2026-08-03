@@ -1,0 +1,1 @@
+export { RackComponent } from './rack'

@@ -1,6 +1,32 @@
 import * as THREE from 'three'
-import type { SceneConfig } from './types'
 import { DebugOverlay } from './debug'
+
+/**
+ * App3D 场景配置（独立于 live-data；createScene3D 走 live-data 路径时不传 config，
+ * 供直接使用 App3D 的场景使用）。
+ */
+export interface SceneConfig {
+  /** 背景色 (hex) */
+  backgroundColor?: string
+  /** 雾色 (hex) */
+  fogColor?: string
+  /** 雾近平面 */
+  fogNear?: number
+  /** 雾远平面 */
+  fogFar?: number
+  /** 相机初始位置 */
+  cameraPosition?: [number, number, number]
+  /** 相机注视点 */
+  cameraTarget?: [number, number, number]
+  /** 相机 FOV */
+  cameraFov?: number
+  /** 是否开启阴影 */
+  enableShadows?: boolean
+  /** HDR 环境贴图路径 */
+  envMap?: string
+  /** 色调映射曝光度 */
+  toneMappingExposure?: number
+}
 
 export interface App3DOptions {
   canvas: HTMLCanvasElement

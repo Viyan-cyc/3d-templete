@@ -22,7 +22,6 @@
  */
 
 import * as THREE from 'three'
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { App3D } from './App3D'
 import { CardManager } from './managers/card/CardManager'
 import type { CardStateCallback, CardScanRule } from './managers/card/types'
@@ -30,14 +29,12 @@ import { createOrbitControls } from './controls/OrbitControls'
 import {
   applyLiveDataToApp,
   loadModelObjects,
-  type LiveDataConfig,
-  type LiveDataObject,
-} from './utils/liveDataLoader'
-import {
   removeObjects,
   upsertObjects,
   type ObjectIndex,
-} from './utils/sceneUpdate'
+  type LiveDataConfig,
+  type LiveDataObject,
+} from './scene'
 import { ScenePicker } from './interaction/picker'
 import { registerComponentHandlers, disposeComponentHandlers } from './managers'
 
@@ -143,7 +140,7 @@ export async function createScene3D(
   // 1. 3D 引擎
   const app = new App3D({ canvas, enableShadows, antialias: true, debug })
 
-  // 2. 应用数据（内部 app.setCamera 替换相机），拿到 id→Object3D 索引供 update 用
+  // 2. 应用数据（环境 + 物体全量建；内部 app.setCamera 替换相机、含 PMREM 环境），拿到 id→Object3D 索引供 update 用
   const width = canvas.clientWidth || container.clientWidth || 1
   const height = canvas.clientHeight || container.clientHeight || 1
   const objectIndex: ObjectIndex = applyLiveDataToApp(app, data, {
@@ -151,10 +148,7 @@ export async function createScene3D(
     preset,
   })
 
-  // 3. IBL 环境光（PMREM）—— physical 材质必需；按 config.scene.environment 驱动
-  applyEnvironment(app, data)
-
-  // 4. OrbitControls（相机替换之后再创建）
+  // 3. OrbitControls（相机替换之后再创建）
   const controls = createOrbitControls(app.camera, canvas, controlsOpts)
 
   // 5. 卡片系统（CSS2D）—— 一步式构造
@@ -280,17 +274,4 @@ export async function createScene3D(
       app.dispose()
     },
   }
-}
-
-/** 根据 live-data 的 scene.environment 配置建立 PMREM 环境光 */
-function applyEnvironment(app: App3D, config: LiveDataConfig): void {
-  const env = config.scene?.environment
-  const pmrem = new THREE.PMREMGenerator(app.renderer)
-  // 默认用 RoomEnvironment 作为 IBL；强度由 config 控制
-  const intensity = env?.intensity
-  app.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-  if (intensity !== undefined) {
-    app.scene.environmentIntensity = intensity
-  }
-  pmrem.dispose()
 }

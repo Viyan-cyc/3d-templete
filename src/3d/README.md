@@ -86,7 +86,7 @@ const handle = createScene3D(canvas, data, { cardRules })
 | 灯光 `lights[].type` | `ambient` `hemisphere` `directional`（可带阴影） |
 | 相机 `camera.type` | `perspective` `orthographic` |
 
-> 完整字段参考 [`src/3d/utils/liveDataLoader.ts`](utils/liveDataLoader.ts) 里的 `LiveDataConfig` 系列类型。本项目 `public/live-data.json` 是一个完整示例。
+> 完整字段参考 [`src/3d/scene/loader.ts`](scene/loader.ts) 里的 `LiveDataConfig` 系列类型。本项目 `public/live-data.json` 是一个完整示例。
 
 ---
 

@@ -2,52 +2,41 @@
  * ============================================================
  *  ComponentManager — 业务层组件生命周期分派器
  *
- *  在现有 resolver 链（component.name > component.type > src > geometry > group）
- *  之上，提供 操作 × 类型 的二维分派：当 live-data 中某个对象属于特定业务类型
- *  （device / tree / Wall 等）时，走该类型注册的 handler；否则回落到 default 逻辑。
+ *  四层链：data → manager → handlers → components
+ *    - manager 按优先级遍历「创建 kind 链」，首个 match 且 create 返回非 null 的 handler 胜出；
+ *    - handler 薄，调 new XxxComponent(options) 实例化组件（创建逻辑在 components 层）；
+ *    - create 成功后统一盖 userData.__id / __componentType。
  *
  *  用法：
- *    1. 注册 handler：componentManager.register('device', deviceHandler)
- *    2. 创建时：componentManager.create(data, ctx, createLiveObject3D)
- *    3. 更新时：componentManager.update(obj, data, ctx, patchObject)
- *    4. 删除时：componentManager.delete(obj, ctx, disposeObject)
- *
- *  未注册的类型自动回落 defaultFn，零侵入现有逻辑。
+ *    1. registerCreationChain([...])  注册 kind 链（按优先级，在 createScene3D 初始化时一次）
+ *    2. componentManager.create(data, ctx)         创建
+ *    3. componentManager.update(obj, data, ctx, patchObject)   更新
+ *    4. componentManager.delete(obj, ctx, disposeObject)      删除
  * ============================================================
  */
 
 import type * as THREE from 'three'
-import type { LiveDataObject } from '../../utils/liveDataLoader'
-import type { ObjectIndex } from '../../utils/sceneUpdate'
-import type { ComponentSharedState } from './handlers/shared'
+import type { LiveDataObject } from '../../scene/loader'
+import type { ObjectIndex } from '../../scene/objects'
+import type { ComponentSharedState } from './handlers/base/shared'
 
 // ── 类型定义 ──
 
 /**
  * 单个业务类型的生命周期处理器。
- * 只需实现关心的操作，其余回落 default。
+ * 只需实现关心的操作；create 返回 null 表示未处理（回落 kind 链下一项），
+ * update/delete 返回 false 表示未处理（回落 defaultFn）。
  */
 export interface ComponentHandler {
-  /**
-   * 创建：拿到数据，返回 Object3D。
-   * 返回 null 则回落到 default 逻辑（createLiveObject3D）。
-   */
+  /** 创建：返回 Object3D，null 表示未处理（回落 kind 链下一项） */
   create?: (data: LiveDataObject, ctx: ComponentContext) => THREE.Object3D | null
-
-  /**
-   * 更新：拿到已有 Object3D 和新数据。
-   * 返回 true 表示已处理，false 回落 default（patchObject）。
-   */
+  /** 更新：返回 true 表示已处理，false 回落 defaultFn */
   update?: (obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext) => boolean
-
-  /**
-   * 删除：拿到 Object3D。
-   * 返回 true 表示已处理，false 回落 default（disposeObject）。
-   */
+  /** 删除：返回 true 表示已处理，false 回落 defaultFn */
   delete?: (obj: THREE.Object3D, ctx: ComponentContext) => boolean
 }
 
-/** handler 执行上下文（可随需求扩展） */
+/** handler 执行上下文 */
 export interface ComponentContext {
   scene: THREE.Scene
   index: ObjectIndex
@@ -55,27 +44,28 @@ export interface ComponentContext {
   shared: ComponentSharedState
 }
 
+/** 创建 kind 链的一项：match 命中则交给 handler；handler.create 返回 null 则继续下一项 */
+export interface CreationEntry {
+  /** 类型标识（delete 时按 __componentType 匹配此项） */
+  key: string
+  /** 是否能处理该 data（按 data 形状判断） */
+  match: (data: LiveDataObject) => boolean
+  handler: ComponentHandler
+}
+
 // ── Manager ──
 
 export class ComponentManager {
-  private _handlers = new Map<string, ComponentHandler>()
+  private _chain: CreationEntry[] = []
 
-  /** 注册一个业务类型的处理器 */
-  register(type: string, handler: ComponentHandler): void {
-    if (this._handlers.has(type)) {
-      console.warn(`[ComponentManager] "${type}" 已注册，将被覆盖`)
-    }
-    this._handlers.set(type, handler)
-  }
-
-  /** 批量注册 */
-  registerAll(entries: Array<[string, ComponentHandler]>): void {
-    entries.forEach(([type, handler]) => this.register(type, handler))
+  /** 注册创建 kind 链（按优先级顺序；首项 match 且 create 返回非 null 者胜出） */
+  registerCreationChain(entries: CreationEntry[]): void {
+    this._chain = entries
   }
 
   /**
-   * 从 LiveDataObject 解析出业务类型 key。
-   * 优先级：component.name > component.type，与 resolver 链一致。
+   * 从 LiveDataObject 解析业务类型 key。
+   * 优先级：component.name > component.type（盖 __componentType 用，与原实现一致）。
    */
   resolveType(data: LiveDataObject): string | null {
     return data.component?.name ?? data.component?.type ?? null
@@ -90,37 +80,26 @@ export class ComponentManager {
   }
 
   /**
-   * 分派创建：优先走 handler，null 则回落 defaultFn。
-   * 创建成功后自动在 userData.__componentType 写入类型标记。
+   * 分派创建：按 kind 链优先级遍历，首个 match 且 create 返回非 null 者胜出（null 则回落下一项）。
+   * 创建成功后自动盖 userData.__id（data.id）与 __componentType（resolveType）。
    */
-  create(
-    data: LiveDataObject,
-    ctx: ComponentContext,
-    defaultFn: (data: LiveDataObject) => THREE.Object3D | null,
-  ): THREE.Object3D | null {
-    const type = this.resolveType(data)
-
-    if (type) {
-      const handler = this._handlers.get(type)
-      if (handler?.create) {
-        const result = handler.create(data, ctx)
-        if (result !== null) {
-          result.userData.__componentType = type
-          return result
-        }
-        // handler 返回 null → 继续走 default
+  create(data: LiveDataObject, ctx: ComponentContext): THREE.Object3D | null {
+    for (const entry of this._chain) {
+      if (!entry.match(data)) continue
+      const result = entry.handler.create?.(data, ctx) ?? null
+      if (result) {
+        if (data.id) result.userData.__id = data.id
+        const stamp = this.resolveType(data)
+        if (stamp) result.userData.__componentType = stamp
+        return result
       }
+      // handler 返回 null → 继续 kind 链下一项
     }
-
-    const result = defaultFn(data)
-    if (result && type) {
-      result.userData.__componentType = type
-    }
-    return result
+    return null
   }
 
   /**
-   * 分派更新：优先走 handler，返回 true 表示已处理，否则回落 defaultFn。
+   * 分派更新：首个 match 的 handler.update 返回 true 则结束，否则回落 defaultFn。
    */
   update(
     obj: THREE.Object3D,
@@ -128,42 +107,33 @@ export class ComponentManager {
     ctx: ComponentContext,
     defaultFn: (obj: THREE.Object3D, data: LiveDataObject) => void,
   ): void {
-    const type = this.resolveType(data) ?? this.resolveTypeFromObj(obj)
-
-    if (type) {
-      const handler = this._handlers.get(type)
-      if (handler?.update?.(obj, data, ctx)) return
-    }
-
+    const entry = this._chain.find((e) => e.match(data))
+    if (entry?.handler.update?.(obj, data, ctx)) return
     defaultFn(obj, data)
   }
 
   /**
-   * 分派删除：优先走 handler，返回 true 表示已处理，否则回落 defaultFn。
+   * 分派删除：按 __componentType 找 handler，返回 true 则结束，否则回落 defaultFn。
    */
   delete(
     obj: THREE.Object3D,
     ctx: ComponentContext,
     defaultFn: (obj: THREE.Object3D) => void,
   ): void {
-    const type = this.resolveTypeFromObj(obj)
-
-    if (type) {
-      const handler = this._handlers.get(type)
-      if (handler?.delete?.(obj, ctx)) return
-    }
-
+    const key = this.resolveTypeFromObj(obj)
+    const entry = key ? this._chain.find((e) => e.key === key) : undefined
+    if (entry?.handler.delete?.(obj, ctx)) return
     defaultFn(obj)
   }
 
-  /** 是否已注册某类型 */
-  has(type: string): boolean {
-    return this._handlers.has(type)
+  /** 是否已注册某 key */
+  has(key: string): boolean {
+    return this._chain.some((e) => e.key === key)
   }
 
-  /** 列出所有已注册的类型名（调试用） */
+  /** 列出所有已注册的 key（调试用） */
   list(): string[] {
-    return [...this._handlers.keys()]
+    return this._chain.map((e) => e.key)
   }
 }
 
