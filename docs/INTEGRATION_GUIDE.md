@@ -11,7 +11,7 @@
 
 1. [5 分钟快速开始](#1-5-分钟快速开始)
 2. [核心概念](#2-核心概念)
-3. [数据结构详解（LiveDataConfig）](#3-数据结构详解liveconfig)
+3. [数据结构详解（LiveDataConfig）](#3-数据结构详解livedataconfig)
 4. [物体类型与写法](#4-物体类型与写法)
 5. [材质写法速查](#5-材质写法速查)
 6. [卡片系统：3D 物体上的 2D 信息面板](#6-卡片系统3d-物体上的-2d-信息面板)
@@ -55,7 +55,7 @@ onMounted(async () => {
   // ② 创建 3D 场景
   handle = await createScene3D(canvas.value!, data, {
     cardRules,             // 卡片规则（决定哪些物体挂什么卡片）
-    container: container.value!,  // 卡片 UI 层的挂载容器
+    container: container.value!,  // 卡片 UI 层的挂载容器（默认 canvas.parentElement）
   })
 
   // ③ 订阅卡片状态，喂给 <CardHost>
@@ -73,13 +73,24 @@ onUnmounted(() => {
 
 **就这些。** 你不需要写任何 3D 代码。
 
+> 本工程的 [views/Scene3D.vue](../src/views/Scene3D.vue) 就是一份可直接参考的完整实现，还内置了加载态、错误态、定时更新等。
+
 ### 1.2 你需要准备的东西
 
 | 东西 | 说明 |
 |------|------|
-| **场景数据** | 一份 JSON，描述场景里有什么物体、长什么样、怎么布局 |
-| **卡片规则** | 一段 TypeScript 代码，描述哪些物体上显示什么 2D 卡片 |
+| **场景数据** | 一份 JSON（LiveDataConfig），描述场景里有什么物体、长什么样、怎么布局 |
+| **卡片规则** | 一段 TypeScript 代码（`CardScanRule[]`），描述哪些物体上显示什么 2D 卡片 |
 | **卡片 Vue 组件** | 普通的 Vue 组件，写卡片长什么样、显示什么数据（在 `src/components/cards/` 中） |
+
+### 1.3 两个路由入口
+
+本工程内置两个页面入口（[router/index.ts](../src/router/index.ts)）：
+
+| 路由 | 文件 | 用途 |
+|------|------|------|
+| `/` | [Scene3D.vue](../src/views/Scene3D.vue) | 生产/交付入口：自己 fetch 数据，可选 `?update=` 定时更新 |
+| `/embed` | [embed.vue](../src/views/embed.vue) | 预览/编辑入口：供宿主 iframe 嵌入，走 postMessage 协议 |
 
 ---
 
@@ -110,7 +121,7 @@ onUnmounted(() => {
 
 - **LiveData（JSON 数据）**：描述场景的全部内容——背景、相机、灯光、物体
 - **CardRules（卡片规则）**：描述哪些 3D 物体上需要显示 2D 信息卡片
-- **CardHost（卡片宿主）**：一个组件（Vue 版在 `@/adapters/vue`，React 版在 `@/adapters/react`），负责把你的卡片组件渲染到 3D 物体旁边
+- **CardHost（卡片宿主）**：一个组件（Vue 版在 `@/adapters/vue`），负责把你的卡片组件渲染到 3D 物体旁边
 
 ### 2.3 你只关心的两件事
 
@@ -129,7 +140,7 @@ onUnmounted(() => {
   "angleUnit": "deg",         // 角度单位，"deg"=度，"rad"=弧度
   "scene": {                  // 场景环境
     "background": "#87CEEB",  // 背景色
-    "environment": {          // 环境光（影响材质反射）
+    "environment": {          // 环境光（影响材质反射；intensity 生效）
       "preset": "city",
       "intensity": 0.9
     },
@@ -145,6 +156,8 @@ onUnmounted(() => {
   "objects": [ ... ]          // 物体列表（见下方）
 }
 ```
+
+> **场景预设**：`scene` / `camera` / `lights` 缺失时会自动回落到预设配置，保证不报错。内置预设 `dark`（默认）/ `outdoor` / `industrial` / `studio`，可在 `createScene3D` 的 `options.preset` 指定，也可用 `registerScenePreset()` 注册自定义预设。详见 [开发文档 §12](./DEVELOPMENT_GUIDE.md#12-场景预设)。
 
 ### 3.2 相机
 
@@ -183,6 +196,8 @@ onUnmounted(() => {
 - `position`：相机在 3D 空间中的位置。`[x, y, z]`，y 是高度
 - `lookAt`：相机看向哪个点
 - `fov`：视野角度，50-60 是舒适范围，越大看到越多但变形越大
+
+> `perspective` 与 `orthographic` 互斥，按 `type` 只保留对应子字段。正交相机会随容器宽高比自动重算水平范围（垂直范围不变）。
 
 ### 3.3 灯光
 
@@ -242,10 +257,13 @@ onUnmounted(() => {
     "geometry": { ... },         // 形状
     "material": { ... },         // 材质
     "castShadow": true,          // 投射阴影
-    "receiveShadow": true        // 接收阴影
+    "receiveShadow": true,       // 接收阴影
+    "__zone": false              // 可选：分区标记（见下方）
   }
 ]
 ```
+
+**`__zone` 分区标记**（可选）：标记一个 group 是「分区容器」。编辑态拾取的「整体选中」模式据此识别一个完整物体（如一棵树、一栋楼）。权威来源是 JSON 的 `__zone: true` 字段，支持嵌套分区；无标记时回落到「场景根的直接子 = 分区」启发式。一般产品开发者无需关心，由宿主（如 octoapp）按需注入。
 
 ---
 
@@ -287,7 +305,7 @@ onUnmounted(() => {
 }
 ```
 
-**支持的几何体**：
+**支持的几何体**（`geometry.type`）：
 
 | 类型 | 参数 | 用途 |
 |------|------|------|
@@ -296,16 +314,16 @@ onUnmounted(() => {
 | `sphere` | `radius`, `widthSegments`, `heightSegments` | 球体/树冠 |
 | `cylinder` | `radiusTop`, `radiusBottom`, `height`, `radialSegments` | 柱子/树干 |
 | `cone` | `radius`, `height`, `radialSegments` | 锥体/尖顶 |
-| `torus` | `innerRadius`, `outerRadius`, `radialSegments`, `thetaSegments` | 圆环 |
+| `torus` | `innerRadius`, `outerRadius`, `radialSegments`, `thetaSegments`, `arc` | 圆环 |
 | `circle` | `radius`, `segments` | 圆面/底盘 |
-| `ring` | `innerRadius`, `outerRadius`, `thetaSegments` | 环面/装饰 |
-| `text` | `text`, `size`, `depth` | 文字（ASCII 立体，中文贴图） |
+| `ring` | `innerRadius`, `outerRadius`, `thetaSegments`, `phiSegments` | 环面/装饰 |
+| `text` | `text`, `size` | 文字（canvas 贴图，中英文均支持） |
 
 **几何体参数都有默认值**，可以省略不写。比如 `box` 默认是 1×1×1 的立方体。
 
-### 4.3 component — 内置组件
+### 4.3 component — 内置垂域组件
 
-预置的复合组件（如货架、书架、传送带等），通过 `component.type` 指定。
+预置的复合组件，通过 `component.type` 指定。当前内置 `rack`（货架）：
 
 ```jsonc
 {
@@ -314,7 +332,7 @@ onUnmounted(() => {
   "parentId": "warehouseZone",
   "component": {
     "type": "rack",
-    "params": { "rows": 4, "cols": 3, "layers": 5 }
+    "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 }
   },
   "material": {
     "type": "standard",
@@ -326,31 +344,22 @@ onUnmounted(() => {
 }
 ```
 
-**内置组件列表**：
+**`rack` 参数**：
 
-| 类域 | 组件 type | 说明 |
-|------|-----------|------|
-| 通用 | `cabinet` | 文件柜 |
-| 通用 | `desk` | 办公桌 |
-| 通用 | `partition` | 隔断 |
-| 通用 | `signage` | 标识牌 |
-| 仓储 | `rack` | 货架 |
-| 仓储 | `bin` | 料箱 |
-| 仓储 | `pallet` | 托盘 |
-| 仓储 | `bookshelf` | 书架 |
-| 仓储 | `showcase` | 展柜 |
-| 工业 | `cnc-machine` | 数控机床 |
-| 工业 | `conveyor` | 传送带 |
-| 工业 | `press` | 冲压机 |
-| 工业 | `robot-arm` | 机械臂 |
-| 港口 | `container` | 集装箱 |
-| 港口 | `crane` | 起重机 |
-| 港口 | `dock` | 码头 |
-| 港口 | `forklift` | 叉车 |
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `levels` | 4 | 搁板层数（夹在 2~20） |
+| `width` | 2 | 货架宽度 |
+| `height` | 2 | 货架高度 |
+| `depth` | 0.6 | 货架深度 |
+
+> 货架会程序化生成 4 根立柱 + N 层搁板，子节点带 name（`postBL`/`postBR`/`postTL`/`postTR`/`shelf0`...）。运行时改 `levels` 会就地重建搁板（不重建整个物体）。
+>
+> 需要其他垂域组件（传送带、机械臂等）？这些是 3D 开发者按需扩展的，详见 [开发文档 §4](./DEVELOPMENT_GUIDE.md#4-添加新组件component--handler)。
 
 ### 4.4 component (3d-components) — 高级组件
 
-引用 `@cyc/3d-components` 组件库中的组件，通过 `component.name` 指定。支持 Grid、Wall、HeatMesh 等。
+引用 `@cyc/3d-components` 组件库中的组件，通过 `component.name` 指定。支持 Grid、Wall、HeatMesh、Sky 等。
 
 ```jsonc
 {
@@ -366,7 +375,7 @@ onUnmounted(() => {
 }
 ```
 
-> **`name` vs `type`**：`name` 引用 3d-components 库组件（优先级最高），`type` 引用内置 builder 组件。如果同时存在，`name` 优先。
+> **`name` vs `type`**：`name` 引用 3d-components 库组件（优先级最高），`type` 引用内置垂域组件（如 `rack`）。`name` 命中时走库组件；未命中时回落到 `type`。
 
 ### 4.5 glb/model — 外部模型
 
@@ -399,7 +408,7 @@ onUnmounted(() => {
 |------|------|------|
 | `asset:xxx` | `asset:windmill` | 本地注册模型（需 3D 开发者在 modelRegistry 中注册） |
 | `https://...` | `https://cdn.example.com/car.glb` | 远程 URL |
-| `hunyuan:xxx` | `hunyuan:风力发电机` | AI 生成模型（暂不可用） |
+| `hunyuan:xxx` | `hunyuan:风力发电机` | AI 生成模型（暂未接入，会回落红色方块兜底） |
 
 > 模型加载是异步的：场景会先显示，模型加载完后自动出现。加载失败会显示一个红色方块占位。
 
@@ -445,7 +454,7 @@ onUnmounted(() => {
 
 | 参数 | 类型 | 说明 | 常用值 |
 |------|------|------|--------|
-| `type` | string | 材质类型 | `standard`（默认）、`basic`（自发光）、`physical`（高级PBR） |
+| `type` | string | 材质类型 | `standard`（默认）、`basic`（自发光）、`physical`（高级PBR）、`phong`（高光） |
 | `color` | string | 颜色（hex） | `"#ff4444"` |
 | `roughness` | number | 粗糙度 0~1 | 0=镜面，1=完全粗糙，默认 0.5 |
 | `metalness` | number | 金属度 0~1 | 0=非金属，1=纯金属，默认 0 |
@@ -455,13 +464,15 @@ onUnmounted(() => {
 | `ior` | number | 折射率 | 仅 physical，玻璃 1.5 |
 | `clearcoat` | number | 清漆层 0~1 | 仅 physical，车漆效果 |
 
+> 相同参数的材质会被自动缓存共享，无需手动管理。未知 `type` 会回落为法线材质（彩色渐变，便于排错）。
+
 ---
 
 ## 6. 卡片系统：3D 物体上的 2D 信息面板
 
 ### 6.1 卡片是什么
 
-卡片是浮在 3D 物体旁边的 **2D 信息面板**，用普通的组件来写（Vue 或 React 均可）。它通过 CSS2D 技术定位在 3D 物体旁边，跟随物体移动。
+卡片是浮在 3D 物体旁边的 **2D 信息面板**，用普通的组件来写。它通过 CSS2D 技术定位在 3D 物体旁边，跟随物体移动。
 
 ```
      ┌──────────────┐
@@ -479,10 +490,10 @@ onUnmounted(() => {
 
 ### 6.2 第一步：写卡片组件
 
-卡片就是一个普通的组件（Vue SFC 或 React 函数组件），接收 `cardId`、`objectId` 和自定义 props。
+卡片就是一个普通的 Vue 组件，接收 `cardId`、`objectId` 和自定义 props。本工程内置一个通用 [InfoCard.vue](../src/components/cards/InfoCard.vue) 示例：
 
 ```vue
-<!-- DeviceCard.vue -->
+<!-- src/components/cards/DeviceCard.vue -->
 <template>
   <div class="device-card">
     <div class="card-title">{{ name }}</div>
@@ -518,45 +529,17 @@ const statusText = computed(() => {
   return map[props.status ?? ''] ?? props.status
 })
 </script>
-
-<style scoped>
-.device-card {
-  background: rgba(0, 0, 0, 0.85);
-  color: #fff;
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  min-width: 140px;
-  pointer-events: auto;
-}
-.card-title {
-  font-weight: bold;
-  margin-bottom: 6px;
-  font-size: 14px;
-}
-.card-row {
-  display: flex;
-  justify-content: space-between;
-  margin: 3px 0;
-}
-.label { color: #999; }
-.status.running { color: #4CAF50; }
-.status.stopped { color: #F44336; }
-.status.warning { color: #FF9800; }
-.status.offline { color: #666; }
-</style>
 ```
 
 ### 6.3 第二步：定义卡片规则
 
-卡片规则告诉引擎：**哪些物体挂卡片、卡片用什么组件、卡片显示什么数据**。
+卡片规则告诉引擎：**哪些物体挂卡片、卡片用什么组件、卡片显示什么数据**。在 [adapters/vue/sceneCardRules.ts](../src/adapters/vue/sceneCardRules.ts) 中声明：
 
 ```ts
-// src/adapters/vue/sceneCardRules.ts（Vue 适配层）
+// src/adapters/vue/sceneCardRules.ts
 import type { Component } from 'vue'
 import type { CardScanRule } from '@/3d'
 import DeviceCard from '@/components/cards/DeviceCard.vue'
-import BuildingCard from '@/components/cards/BuildingCard.vue'
 
 export const cardRules: CardScanRule<Component>[] = [
   {
@@ -577,18 +560,6 @@ export const cardRules: CardScanRule<Component>[] = [
       name: `设备 ${group.id}`,
       status: 'running',
       temperature: 42,
-    }),
-  },
-  {
-    type: 'building',
-    component: BuildingCard,
-    pattern: /^(building\d+)_/,
-    anchor: 'highest',
-    offset: [0, 2, 0],
-    interactiveGroup: 'scene',
-    props: (group) => ({
-      name: `建筑 ${group.id}`,
-      floors: 10,
     }),
   },
 ]
@@ -626,12 +597,12 @@ id = "tree01_crown"    → 这棵树的树冠
 
 ### 6.6 卡片显隐模式
 
-卡片的显示/隐藏由 `CardDef.mode` 控制：
+卡片的显示/隐藏由 `mode` 控制：
 
 - **`click`**（默认）：点击物体显示卡片，再次点击或点击空白处隐藏。同 `interactiveGroup` 内互斥。
 - **`always`**：始终显示，不受点击影响。
 
-> 目前 `mode` 在 `CardScanRule` 产生的 `CardDef` 中默认是 `click`。如果需要 `always` 模式，可以通过 `cardManager.addCard` 手动添加。
+> `CardScanRule` 产生的卡片默认是 `click` 模式。如果需要 `always` 模式，可以通过 `handle.cardManager.addCard(...)` 手动添加并在 `def.mode` 设 `'always'`。
 
 ### 6.7 props 数据流
 
@@ -650,7 +621,6 @@ interface CardScanGroup {
 
 // 示例：从 3D 物体属性中提取数据
 props: (group) => {
-  // 可以从 mesh 的 position 推算高度
   const height = Math.max(...group.meshes.map(m => m.position.y))
   return {
     name: group.id,
@@ -725,6 +695,8 @@ handle.update({
 })
 ```
 
+> 删除只处理显式传入的 id。若删的是父节点，其子孙会被一并移出场景，但不会自动清出索引、也不会自动 dispose——需要的话请把子孙 id 一并传入 `remove`。
+
 ### 7.3 混合操作
 
 ```ts
@@ -745,8 +717,31 @@ handle.update({
 |------|------|
 | **就地补丁** | 已有物体只更新变化的部分，不会重建，不闪烁 |
 | **卡片同步** | 增删物体后，受影响的卡片自动更新 |
-| **handler 分派** | 如果物体类型注册了 handler（如 device），更新走 handler 逻辑（如状态变色） |
+| **handler 分派** | 如果物体类型注册了 handler（如 rack），更新走 handler 逻辑（如改层数重建搁板） |
 | **乱序支持** | upsert 数组中子可以先于父出现，引擎会正确处理挂载顺序 |
+
+### 7.5 定时更新（LiveDataPoller）
+
+如果需要定时从后端拉数据做增量更新，用 [LiveDataPoller](../src/adapters/live-data/LiveDataPoller.ts)。它框架无关，只产 `SceneUpdatePatch`，由你决定怎么 `update`：
+
+```ts
+import { LiveDataPoller } from '@/adapters/live-data'
+
+const poller = new LiveDataPoller({
+  url: '/api/scene/updates',                 // 轮询接口
+  intervalMs: 2000,                          // 间隔（ms）
+  onPatch: (patch) => handle.update(patch),  // 收到一帧 → 增量更新
+  refetch: true,                             // true=每个间隔重新 fetch（对接真实接口）
+})
+await poller.start()
+onUnmounted(() => poller.stop())
+```
+
+两种模式：
+- **静态 mock**（`refetch: false`，默认）：一次 fetch 拿到全部帧 `{ intervalMs, frames: [SceneUpdatePatch, ...] }`，按间隔循环下发
+- **真实后端**（`refetch: true`）：每个间隔重新 fetch，响应体直接当作一个 `SceneUpdatePatch`
+
+> 模板的 [Scene3D.vue](../src/views/Scene3D.vue) 内置演示：URL 加 `?update=1` 启动定时更新（默认读 `live-data-handlers-update.json`），`?update=foo.json` 指定文件，`?interval=1000` 指定间隔。
 
 ---
 
@@ -754,7 +749,7 @@ handle.update({
 
 ### 8.1 概述
 
-如果你的产品（如 octoapp）需要嵌入 3D 场景并在编辑模式下使用拾取、飞入、主题切换等功能，可以通过 iframe 嵌入 + postMessage 通信。
+如果你的产品（如 octoapp）需要嵌入 3D 场景并在编辑模式下使用拾取、飞入、主题切换等功能，可以通过 iframe 嵌入 `/embed` 路由 + postMessage 通信。
 
 ### 8.2 嵌入方式
 
@@ -770,23 +765,23 @@ handle.update({
 
 **宿主 → 场景**（你发送给 iframe）：
 
-| 消息类型 | 用途 | payload |
+| 消息类型 | 字段 | 用途 |
 |----------|------|---------|
-| `SCENE_UPDATE` | 替换整个场景数据 | 完整的 LiveDataConfig JSON |
-| `SCENE_PATCH` | 增量更新物体 | SceneUpdatePatch（upsert/remove） |
-| `SCENE_PICK_MODE` | 开启/关闭拾取模式 | `{ enabled: boolean }` |
-| `SCENE_PICK_GRANULARITY` | 切换拾取粒度 | `{ granularity: 'part' \| 'whole' }` |
-| `SCENE_FLY_TO` | 飞到指定物体 | `{ targetId: string }` |
-| `SCENE_THEME` | 切换明暗主题 | `{ mode: 'light' \| 'dark' }` |
-| `SCENE_RESET_CAMERA` | 复位相机 | 无 |
+| `SCENE_UPDATE` | `payload: LiveDataConfig \| null` | 替换/清空整个场景数据 |
+| `SCENE_PATCH` | `payload: SceneUpdatePatch` | 增量更新物体（upsert/remove） |
+| `SCENE_PICK_MODE` | `enabled: boolean` | 开启/关闭拾取模式 |
+| `SCENE_PICK_GRANULARITY` | `granularity: 'part' \| 'whole'` | 切换拾取粒度 |
+| `SCENE_FLY_TO` | `targetId: string` | 飞到指定物体 |
+| `SCENE_THEME` | `mode: 'light' \| 'dark'` | 切换明暗主题 |
+| `SCENE_RESET_CAMERA` | — | 复位相机 |
 
 **场景 → 宿主**（iframe 发送给你）：
 
-| 消息类型 | 用途 | 数据 |
+| 消息类型 | 数据 | 用途 |
 |----------|------|------|
-| `SCENE_READY` | 场景加载完成 | 无 |
-| `SCENE_PICK` | 用户选中了一个物体 | `{ id, name?, component? }` |
-| `SCENE_ERROR` | 场景出错 | `{ message: string }` |
+| `SCENE_READY` | 无 | 场景就绪握手（加载后立即发，宿主收到后重发 pendingData） |
+| `SCENE_PICK` | `{ id, name?, component?, props? }` | 用户选中了一个物体 |
+| `SCENE_ERROR` | `{ message: string }` | 场景出错 |
 
 ### 8.4 代码示例
 
@@ -823,6 +818,8 @@ window.addEventListener('message', (event) => {
   }
 })
 ```
+
+> 协议定义在 [bridge/postMessage-host.ts](../src/3d/bridge/postMessage-host.ts)，`embed.vue` 用 `bindPostMessageHost` 绑定监听并分发到 `handle`。embed 会做 payload 去重（onLoad 与 SCENE_READY 重发的相同 payload 只渲染一次），独立访问 `/embed` 时会自渲染默认场景便于调试。
 
 ---
 
@@ -893,12 +890,12 @@ window.addEventListener('message', (event) => {
 ### 9.2 仓储场景 + 货架卡片
 
 ```jsonc
-// JSON 中的物体
+// JSON 中的物体（注意 id 用 _ 连接，方便卡片 pattern 匹配）
 {
   "id": "rack01_base",
   "type": "component",
   "parentId": "warehouseZone",
-  "component": { "type": "rack", "params": { "rows": 3, "cols": 4, "layers": 5 } },
+  "component": { "type": "rack", "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 } },
   "material": { "type": "standard", "color": "#888888", "roughness": 0.5, "metalness": 0.3 },
   "position": [5, 0, 3]
 }
@@ -923,26 +920,29 @@ const cardRules: CardScanRule<Component>[] = [
 ]
 ```
 
-### 9.3 实时更新 AGV 位置
+### 9.3 实时更新物体位置
 
 ```ts
-// 每秒从后端拉取 AGV 位置并更新
-setInterval(async () => {
-  const agvs = await fetch('/api/agvs').then(r => r.json())
+// 每秒从后端拉取位置并更新（用 LiveDataPoller 对接真实接口）
+import { LiveDataPoller } from '@/adapters/live-data'
 
-  handle.update({
-    objects: {
-      upsert: agvs.map(agv => ({
-        id: agv.id,                           // AGV 的物体 id
-        position: [agv.x, 0, agv.z],          // 新位置
-        component: {
-          type: 'agv',
-          params: { status: agv.status },      // 状态（handler 会自动变色）
-        },
-      })),
-    },
-  })
-}, 1000)
+const poller = new LiveDataPoller({
+  url: '/api/agvs/updates',
+  intervalMs: 1000,
+  refetch: true,                    // 每秒重新 fetch
+  onPatch: (patch) => handle.update(patch),
+})
+await poller.start()
+
+// 或手动构造补丁：
+// handle.update({
+//   objects: {
+//     upsert: agvs.map(agv => ({
+//       id: agv.id,
+//       position: [agv.x, 0, agv.z],
+//     })),
+//   },
+// })
 ```
 
 ---
@@ -965,17 +965,21 @@ function createScene3D(
 |------|------|--------|------|
 | `cardRules` | `CardScanRule[]` | `[]` | 卡片规则（泛型 `CardScanRule<T>`，适配层指定 `T`） |
 | `container` | `HTMLElement` | `canvas.parentElement` | 卡片 UI 层容器 |
-| `debug` | `boolean` | `false` | 调试面板（也可用 `?debug=true`） |
-| `controls` | `object` | — | 轨道控制配置 |
+| `debug` | `boolean` | `false` | 调试面板（也可用 `?debug=true`，URL 参数优先） |
+| `controls` | `object` | — | 轨道控制配置（minDistance/maxDistance/maxPolarAngle/target 等） |
 | `enableShadows` | `boolean` | `true` | 是否开启阴影 |
-| `interactive` | `boolean` | `false` | 编辑态（拾取/飞入/主题） |
+| `interactive` | `boolean` | `false` | 编辑态（拾取/飞入/主题，供 iframe 嵌入） |
+| `preset` | `string` | `'dark'` | 场景预设（`dark`/`outdoor`/`industrial`/`studio` 或自定义） |
 
 ### 10.2 Scene3DHandle
 
 | 方法/属性 | 类型 | 说明 |
 |-----------|------|------|
+| `app` | `App3D` | 底层引擎（renderer/scene/camera） |
+| `cardManager` | `CardManager` | 卡片管理器（可手动 addCard/showCard 等） |
+| `controls` | `OrbitControlsInstance` | 轨道控制器实例（编程式控制相机） |
 | `onCardState(cb)` | `(cb) => unsubFn` | 订阅卡片状态变化，返回取消订阅函数 |
-| `update(patch)` | `(SceneUpdatePatch) => void` | 增量更新物体 |
+| `update(patch)` | `(SceneUpdatePatch) => void` | 增量更新物体，自动同步卡片 |
 | `setDebug(mode)` | `(boolean) => void` | 切换调试面板 |
 | `picker` | `ScenePicker?` | 拾取器（仅 interactive） |
 | `flyTo` | `(id: string) => void?` | 飞到物体（仅 interactive） |
@@ -985,7 +989,7 @@ function createScene3D(
 
 ### 10.3 CardHost
 
-CardHost 位于适配层（Vue 版在 `@/adapters/vue`，React 版在 `@/adapters/react`）：
+CardHost 位于 Vue 适配层（`@/adapters/vue`）：
 
 ```vue
 <!-- Vue -->
@@ -995,7 +999,7 @@ CardHost 位于适配层（Vue 版在 `@/adapters/vue`，React 版在 `@/adapter
 | Prop | 类型 | 说明 |
 |------|------|------|
 | `cards` | `CardState[]` | 由 `handle.onCardState` 提供的卡片状态数组 |
-| `registry` | `CardRegistry?` | 卡片组件注册表（默认用全局注册表） |
+| `registry` | `CardRegistry?` | 卡片组件注册表（`handle.cardManager.registry`） |
 
 ### 10.4 SceneUpdatePatch
 
@@ -1008,13 +1012,36 @@ interface SceneUpdatePatch {
 }
 ```
 
+### 10.5 其他常用导出
+
+```ts
+// 从 '@/3d' 导出
+import {
+  createScene3D,
+  loadLiveDataConfig,        // 从 ?fetch= 读场景 JSON（可选工具）
+  registerScenePreset,       // 注册自定义场景预设
+  type LiveDataConfig,
+  type Scene3DHandle,
+  type Scene3DOptions,
+  type SceneUpdatePatch,
+  type CardScanRule,
+  type CardState,
+} from '@/3d'
+
+// 轮询适配器
+import { LiveDataPoller } from '@/adapters/live-data'
+
+// postMessage 桥（编辑态）
+import { bindPostMessageHost, postToParent } from '@/3d/bridge/postMessage-host'
+```
+
 ---
 
 ## 11. 常见问题
 
 ### Q: 我不会写 3D，能用这个吗？
 
-**完全可以。** 你只需要写 JSON 数据和卡片组件（Vue 或 React 均可），不需要了解任何 Three.js 知识。3D 渲染完全由引擎处理。
+**完全可以。** 你只需要写 JSON 数据和卡片组件，不需要了解任何 Three.js 知识。3D 渲染完全由引擎处理。
 
 ### Q: JSON 中的坐标是什么意思？
 
@@ -1044,13 +1071,13 @@ interface SceneUpdatePatch {
 
 ### Q: 怎么让卡片始终显示？
 
-默认卡片是点击才显示的。如果需要始终显示，可以在 `cardManager` 上手动操作：
+默认卡片是点击才显示的。如果需要始终显示，可以在 `cardManager` 上手动添加并设 `mode: 'always'`：
 
 ```ts
-handle.onCardState((states) => {
-  cardStates.value = states
-  // 让所有卡片都显示
-  handle.cardManager.showByType('device')
+handle.cardManager.addCard('always-card', 'device', targetMesh, {
+  mode: 'always',
+  offset: [0, 1.5, 0],
+  props: { name: '设备 A' },
 })
 ```
 
@@ -1060,24 +1087,30 @@ handle.onCardState((states) => {
 - 静态文件：`fetch('/live-data.json')`
 - 后端 API：`fetch('/api/scene')`
 - 运行时构造：在 JavaScript 中构造 `LiveDataConfig` 对象
+- 包内工具：`loadLiveDataConfig()`（从 URL `?fetch=` 参数读 JSON，默认 `live-data.json`）
 
 ### Q: 怎么调试场景？
 
-在 URL 中加 `?debug=true`，右上角会显示 FPS、三角形数、Draw Calls 等调试信息。
+在 URL 中加 `?debug=true`，右上角会显示 FPS、三角形数、Draw Calls 等调试信息。也可运行时 `handle.setDebug(true)`。
 
 ### Q: update 之后卡片没更新？
 
 卡片更新依赖物体 `id` 的命名规则。确保：
 1. `CardScanRule.pattern` 能匹配物体的 `id`
-2. 新增物体的 id 遵循已有的命名规则（如 `device01_xxx`）
+2. 新增物体的 id 遵循已有的命名规则（如 `device01_xxx`，用 `_` 连接父 id 和部件名）
 3. 增量更新后 `refreshCards` 会自动重扫受影响的卡片
 
 ### Q: 如何让物体有动画效果？
 
 引擎本身不内置动画系统。常见做法：
-1. 用 `setInterval` 或 `requestAnimationFrame` 定期调用 `handle.update()` 更新物体位置
-2. 在 handler 中实现自定义动画逻辑
+1. 用 `LiveDataPoller` 对接后端轮询接口，定时 `handle.update()` 更新物体位置
+2. 用 `setInterval` 或 `requestAnimationFrame` 定期调用 `handle.update()`
+3. 3d-components 中实现了 `update(delta)` 的组件（如 HeatMesh）会被自动每帧调用
 
 ### Q: 多个卡片能不能同时显示？
 
-可以。只要它们属于不同的 `interactiveGroup`，同一组内互斥，不同组独立。
+可以。只要它们属于不同的 `interactiveGroup`，同一组内互斥，不同组独立。`interactiveGroup` 不填时默认 `'scene'`。
+
+### Q: 场景缺少 camera/lights 会报错吗？
+
+不会。`scene`/`camera`/`lights` 缺失时会自动回落到场景预设（默认 `dark`），保证总能渲染。可用 `options.preset` 切换预设，或 `registerScenePreset()` 注册自定义预设。
