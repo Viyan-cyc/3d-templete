@@ -1,7 +1,7 @@
-import * as THREE from 'three'
-import type { ComponentOptions } from './types'
-import { createLiveMaterial } from './material'
-import { applyTransform, applyShadow } from './transform'
+import * as THREE from 'three';
+import type { ComponentOptions } from './types';
+import { createLiveMaterial } from './material';
+import { applyTransform, applyShadow } from './transform';
 
 /**
  * 基础几何体组件：box/plane/sphere/cylinder/cone/torus/circle/ring 统一一个类，
@@ -10,9 +10,11 @@ import { applyTransform, applyShadow } from './transform'
  */
 export class PrimitiveComponent extends THREE.Mesh {
   constructor(opts: ComponentOptions, geo: THREE.BufferGeometry) {
-    super(geo, createLiveMaterial(opts.material))
-    if (opts.id) this.name = opts.id
-    applyTransform(this, opts)
-    applyShadow(this, opts)
+    super(geo, createLiveMaterial(opts.material));
+    if (opts.id) {
+      this.name = opts.id;
+    }
+    applyTransform(this, opts);
+    applyShadow(this, opts);
   }
 }

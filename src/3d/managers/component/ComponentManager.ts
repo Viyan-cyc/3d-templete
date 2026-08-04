@@ -15,9 +15,9 @@
  * ============================================================
  */
 
-import type * as THREE from 'three'
-import type { LiveDataObject } from '../../scene/loader'
-import type { ComponentSharedState } from './handlers/base/shared'
+import type * as THREE from 'three';
+import type { LiveDataObject } from '../../scene/loader';
+import type { ComponentSharedState } from './handlers/base/shared';
 
 /** id → Object3D 索引（物体层 buildObjects/upsertObjects 维护，借 ctx 透传给 handler） */
 export type ObjectIndex = Map<string, THREE.Object3D>
@@ -30,10 +30,13 @@ export type ObjectIndex = Map<string, THREE.Object3D>
  * update/delete 返回 false 表示未处理（回落 defaultFn）。
  */
 export interface ComponentHandler {
+
   /** 创建：返回 Object3D，null 表示未处理（回落 kind 链下一项） */
   create?: (data: LiveDataObject, ctx: ComponentContext) => THREE.Object3D | null
+
   /** 更新：返回 true 表示已处理，false 回落 defaultFn */
   update?: (obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext) => boolean
+
   /** 删除：返回 true 表示已处理，false 回落 defaultFn */
   delete?: (obj: THREE.Object3D, ctx: ComponentContext) => boolean
 }
@@ -42,14 +45,17 @@ export interface ComponentHandler {
 export interface ComponentContext {
   scene: THREE.Scene
   index: ObjectIndex
+
   /** 跨 handler 共享的状态（颜色映射、材质缓存、自定义 store 等） */
   shared: ComponentSharedState
 }
 
 /** 创建 kind 链的一项：match 命中则交给 handler；handler.create 返回 null 则继续下一项 */
 export interface CreationEntry {
+
   /** 类型标识（delete 时按 __componentType 匹配此项） */
   key: string
+
   /** 是否能处理该 data（按 data 形状判断） */
   match: (data: LiveDataObject) => boolean
   handler: ComponentHandler
@@ -58,11 +64,11 @@ export interface CreationEntry {
 // ── Manager ──
 
 export class ComponentManager {
-  private _chain: CreationEntry[] = []
+  private _chain: CreationEntry[] = [];
 
   /** 注册创建 kind 链（按优先级顺序；首项 match 且 create 返回非 null 者胜出） */
   registerCreationChain(entries: CreationEntry[]): void {
-    this._chain = entries
+    this._chain = entries;
   }
 
   /**
@@ -70,7 +76,7 @@ export class ComponentManager {
    * delete 阶段没有 LiveDataObject，只有 id 列表，因此依赖创建时写入的标记。
    */
   resolveTypeFromObj(obj: THREE.Object3D): string | null {
-    return (obj.userData.__componentType as string) ?? null
+    return (obj.userData.__componentType as string) ?? null;
   }
 
   /**
@@ -80,16 +86,19 @@ export class ComponentManager {
    */
   create(data: LiveDataObject, ctx: ComponentContext): THREE.Object3D | null {
     for (const entry of this._chain) {
-      if (!entry.match(data)) continue
-      const result = entry.handler.create?.(data, ctx) ?? null
-      if (result) {
-        if (data.id) result.userData.__id = data.id
-        result.userData.__componentType = entry.key
-        return result
+      if (entry.match(data)) {
+        const result = entry.handler.create?.(data, ctx) ?? null;
+        if (result) {
+          if (data.id) {
+            result.userData.__id = data.id;
+          }
+          result.userData.__componentType = entry.key;
+          return result;
+        }
+        // handler 返回 null → 继续 kind 链下一项
       }
-      // handler 返回 null → 继续 kind 链下一项
     }
-    return null
+    return null;
   }
 
   /**
@@ -101,9 +110,11 @@ export class ComponentManager {
     ctx: ComponentContext,
     defaultFn: (obj: THREE.Object3D, data: LiveDataObject) => void,
   ): void {
-    const entry = this._chain.find((e) => e.match(data))
-    if (entry?.handler.update?.(obj, data, ctx)) return
-    defaultFn(obj, data)
+    const entry = this._chain.find((e) => e.match(data));
+    if (entry?.handler.update?.(obj, data, ctx)) {
+      return;
+    }
+    defaultFn(obj, data);
   }
 
   /**
@@ -114,12 +125,14 @@ export class ComponentManager {
     ctx: ComponentContext,
     defaultFn: (obj: THREE.Object3D) => void,
   ): void {
-    const key = this.resolveTypeFromObj(obj)
-    const entry = key ? this._chain.find((e) => e.key === key) : undefined
-    if (entry?.handler.delete?.(obj, ctx)) return
-    defaultFn(obj)
+    const key = this.resolveTypeFromObj(obj);
+    const entry = key ? this._chain.find((e) => e.key === key) : undefined;
+    if (entry?.handler.delete?.(obj, ctx)) {
+      return;
+    }
+    defaultFn(obj);
   }
 }
 
 /** 全局单例 */
-export const componentManager = new ComponentManager()
+export const componentManager = new ComponentManager();

@@ -1,1 +1,1 @@
-export { RackComponent } from './rack'
+export { RackComponent } from './rack';

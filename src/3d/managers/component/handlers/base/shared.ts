@@ -9,4 +9,4 @@ export class ComponentSharedState {
 }
 
 /** 全局共享状态单例 */
-export const sharedState = new ComponentSharedState()
+export const sharedState = new ComponentSharedState();

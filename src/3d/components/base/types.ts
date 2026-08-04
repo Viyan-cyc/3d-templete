@@ -1,4 +1,4 @@
-import type { LiveDataMaterial, LiveDataGeometry } from '../../scene/loader'
+import type { LiveDataMaterial, LiveDataGeometry } from '../../scene/loader';
 
 /**
  * 所有组件统一的 options 形状（由 handler 从 LiveDataObject 翻译而来）。
@@ -8,6 +8,7 @@ export interface ComponentOptions {
   id?: string
   geometry?: LiveDataGeometry
   material?: LiveDataMaterial
+
   /** component.params（builder 参数等） */
   params?: Record<string, number | string>
   position?: number[]
@@ -15,6 +16,7 @@ export interface ComponentOptions {
   scale?: number[]
   castShadow?: boolean
   receiveShadow?: boolean
+
   /** 模型资源引用（type='glb'/'model'） */
   src?: string
 }

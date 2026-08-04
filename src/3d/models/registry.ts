@@ -16,7 +16,7 @@
  */
 
 // ---- Vite ?url import：编译时生成带 hash 的资源 URL ----
-import windmillUrl from './windmill.glb?url'
+import windmillUrl from './windmill.glb?url';
 
 /**
  * 模型注册表：key 为 live-data.json 中可引用的名称，value 为编译后的 URL。
@@ -25,9 +25,7 @@ import windmillUrl from './windmill.glb?url'
  *   - src 以 'asset:' 开头 → 去掉前缀后在本表查找
  *   - 否则视为原始 URL 路径（如 '/models/xxx.glb'）
  */
-export const modelRegistry: Record<string, string> = {
-  windmill: windmillUrl,
-}
+export const modelRegistry: Record<string, string> = { windmill: windmillUrl };
 
 /**
  * 解析模型 src 引用，返回可加载的 URL。
@@ -37,18 +35,17 @@ export const modelRegistry: Record<string, string> = {
  *   - '/models/windmill.glb' 或 'https://...' → 原始 URL
  * @returns 可供 GLTFLoader.load() 使用的 URL 字符串
  */
-export function resolveModelSrc(src: string): string {
+export const resolveModelSrc = (src: string): string => {
   if (src.startsWith('asset:')) {
-    const key = src.slice(6) // 'asset:windmill' → 'windmill'
-    const url = modelRegistry[key]
+    // 'asset:windmill' → 'windmill'
+    const key = src.slice(6);
+    const url = modelRegistry[key];
     if (!url) {
-      console.warn(
-        `[models] 未注册的模型: "${key}"，可用: ${Object.keys(modelRegistry).join(', ')}`,
-      )
-      return src
+      console.warn(`[models] 未注册的模型: "${key}"，可用: ${Object.keys(modelRegistry).join(', ')}`);
+      return src;
     }
-    return url
+    return url;
   }
   // 非 asset: 前缀，视为原始 URL
-  return src
-}
+  return src;
+};

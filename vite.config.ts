@@ -1,16 +1,11 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import { viteMockServe } from 'vite-plugin-mock'
 import { resolve } from 'path'
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [
     vue(),
-    viteMockServe({
-      mockPath: 'mock',
-      enable: command === 'serve',
-    }),
   ],
   resolve: {
     alias: [
@@ -40,4 +35,4 @@ export default defineConfig(({ command }) => ({
       'X-Frame-Options': 'ALLOWALL',
     },
   },
-}))
+})

@@ -14,65 +14,69 @@
  * ============================================================
  */
 
-import * as THREE from 'three'
-import * as Core from '@cyc/3d-components/core'
-import * as Heat from '@cyc/3d-components/heat'
-import * as Material from '@cyc/3d-components/material'
+import * as THREE from 'three';
+import * as Core from '@cyc/3d-components/core';
+import * as Heat from '@cyc/3d-components/heat';
+import * as Material from '@cyc/3d-components/material';
 
 /** 组件构造器类型：new (options?) => THREE.Object3D */
 type ComponentCtor = new (options?: Record<string, unknown>) => THREE.Object3D
 
 /** name → Ctor 映射 */
-const registry = new Map<string, ComponentCtor>()
+const registry = new Map<string, ComponentCtor>();
 
 /** 是否已初始化（避免重复 register） */
-let initialized = false
+let initialized = false;
 
 /**
  * 注册一个命名空间导出里所有"首字母大写的 class"。
  * 筛选条件：typeof === 'function' 且 key 首字母大写（排除 Util 等非 class 导出）。
  * 进一步过滤：仅 Object3D 子类（Material 类如 ShinyMaterial 被排除，阶段1 不处理）。
  */
-function registerNamespace(mod: Record<string, unknown>, domain: string): void {
+const registerNamespace = (mod: Record<string, unknown>, domain: string): void => {
   for (const [name, value] of Object.entries(mod)) {
-    if (typeof value !== 'function') continue
-    // 首字母大写 = class 候选（排除 default/__esModule 等）
-    if (!/^[A-Z]/.test(name)) continue
-    const Ctor = value as ComponentCtor
-    // 仅注册 Object3D 子类；Material 子类（ShinyMaterial/MeshReflectorMaterial）跳过
-    if (!(Ctor.prototype instanceof THREE.Object3D)) {
-      // Material 子类：阶段1 不处理，留 TODO
-      continue
+    // 首字母大写 = class 候选（排除 default/__esModule 等）；同时排除非 function 导出
+    if (typeof value === 'function' && /^[A-Z]/.test(name)) {
+      const ctor = value as ComponentCtor;
+      // 仅注册 Object3D 子类；Material 子类（ShinyMaterial/MeshReflectorMaterial）跳过
+      if (ctor.prototype instanceof THREE.Object3D) {
+        if (registry.has(name)) {
+          // 同名跨域冲突（理论不会发生），后者覆盖并 warn
+          console.warn(`[library-bridge] 组件名冲突: ${name} 已注册，被 ${domain} 覆盖`);
+        }
+        registry.set(name, ctor);
+      }
     }
-    if (registry.has(name)) {
-      // 同名跨域冲突（理论不会发生），后者覆盖并 warn
-      console.warn(`[library-bridge] 组件名冲突: ${name} 已注册，被 ${domain} 覆盖`)
-    }
-    registry.set(name, Ctor)
   }
-}
+};
 
 /** 初始化：注册 core/heat/material 三个域。幂等。 */
-export function initLibraryBridge(): void {
-  if (initialized) return
-  registerNamespace(Core as unknown as Record<string, unknown>, 'core')
-  registerNamespace(Heat as unknown as Record<string, unknown>, 'heat')
-  registerNamespace(Material as unknown as Record<string, unknown>, 'material')
-  initialized = true
-  console.log(`[library-bridge] 已注册 ${registry.size} 个 3d-components 组件:`, Array.from(registry.keys()))
-}
+export const initLibraryBridge = (): void => {
+  if (initialized) {
+    return;
+  }
+  registerNamespace(Core, 'core');
+  registerNamespace(Heat, 'heat');
+  registerNamespace(Material, 'material');
+  initialized = true;
+  console.log(`[library-bridge] 已注册 ${registry.size} 个 3d-components 组件:`, Array.from(registry.keys()));
+};
 
 /** 是否存在某名称的组件 */
-export function hasComponent(name: string): boolean {
-  if (!initialized) initLibraryBridge()
-  return registry.has(name)
-}
+export const hasComponent = (name: string): boolean => {
+  if (!initialized) {
+    initLibraryBridge();
+  }
+  return registry.has(name);
+};
 
 /** 按 name 取构造器 */
-export function resolveComponent(name: string): ComponentCtor | undefined {
-  if (!initialized) initLibraryBridge()
-  return registry.get(name)
-}
+export const resolveComponent = (name: string): ComponentCtor | undefined => {
+  if (!initialized) {
+    initLibraryBridge();
+  }
+  return registry.get(name);
+};
 
 /**
  * 实例化一个 3d-components 组件为 Object3D。
@@ -81,22 +85,24 @@ export function resolveComponent(name: string): ComponentCtor | undefined {
  * IUpdatable 处理：组件若有 update(delta) 方法（如 HeatMesh），在 userData.__updatable 标记，
  * 供 createScene3D 收集到 App3D 渲染循环每帧调用。
  */
-export function createComponentObject(
+export const createComponentObject = (
   name: string,
   options?: Record<string, unknown>,
-): THREE.Object3D | null {
-  const Ctor = resolveComponent(name)
-  if (!Ctor) return null
+): THREE.Object3D | null => {
+  const ctor = resolveComponent(name);
+  if (!ctor) {
+    return null;
+  }
 
   try {
-    const obj = new Ctor(options)
+    const obj = Reflect.construct(ctor, [options]);
     // 标记 IUpdatable（有 update 方法且是 function）
     if (typeof (obj as { update?: unknown }).update === 'function') {
-      obj.userData.__updatable = true
+      obj.userData.__updatable = true;
     }
-    return obj
+    return obj;
   } catch (err) {
-    console.error(`[library-bridge] 实例化组件 "${name}" 失败:`, err)
-    return null
+    console.error(`[library-bridge] 实例化组件 "${name}" 失败:`, err);
+    return null;
   }
-}
+};

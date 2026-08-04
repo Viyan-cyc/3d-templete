@@ -37,6 +37,7 @@ export interface SceneHostMessage {
   enabled?: boolean
   targetId?: string
   mode?: 'light' | 'dark'
+
   /** SCENE_PICK_GRANULARITY 的选中粒度：'part'(部件) | 'whole'(整体) */
   granularity?: 'part' | 'whole'
 }
@@ -49,10 +50,13 @@ export type SceneEmbedMessage =
 
 /** 宿主消息的回调集合 */
 export interface PostMessageHostHandlers {
+
   /** 收到 SCENE_UPDATE：data 为 SceneConfig 或 null（清空） */
   onScene: (data: unknown | null) => void | Promise<void>
+
   /** 以下阶段3 启用，阶段0 留空实现 */
   onPickMode?: (enabled: boolean) => void
+
   /** 选中粒度切换：'part'(部件) | 'whole'(整体) */
   onPickGranularity?: (mode: 'part' | 'whole') => void
   onFlyTo?: (targetId: string) => void
@@ -62,10 +66,10 @@ export interface PostMessageHostHandlers {
 }
 
 /** 向宿主发送一条 embed→父 消息 */
-export function postToParent(msg: SceneEmbedMessage): void {
+export const postToParent = (msg: SceneEmbedMessage): void => {
   // 仅当处于 iframe 内时才有意义；独立访问 embed 时 parent===self，postMessage 也安全
-  window.parent.postMessage(msg, '*')
-}
+  window.parent.postMessage(msg, '*');
+};
 
 /**
  * 绑定 postMessage 宿主监听，返回卸载函数。
@@ -79,46 +83,52 @@ export function postToParent(msg: SceneEmbedMessage): void {
  * 阶段0：bindPostMessageHost 本身不收 handle/picker —— 阶段3 扩展时再传入，
  * 或在 handlers.onPickMode 内部操作 picker，保持桥与渲染解耦。
  */
-export function bindPostMessageHost(handlers: PostMessageHostHandlers): () => void {
+export const bindPostMessageHost = (handlers: PostMessageHostHandlers): () => void => {
   const listener = async (e: MessageEvent) => {
     // 忽略非预期来源（postMessage 用 '*'，此处只认自己的协议结构）
-    const data = e.data as SceneHostMessage | undefined
-    if (!data || typeof data.type !== 'string') return
+    const data = e.data as SceneHostMessage | undefined;
+    if (!data || typeof data.type !== 'string') {
+      return;
+    }
 
     try {
       switch (data.type) {
         case 'SCENE_UPDATE':
-          await handlers.onScene(data.payload ?? null)
-          break
+          await handlers.onScene(data.payload ?? null);
+          break;
         case 'SCENE_PICK_MODE':
-          handlers.onPickMode?.(data.enabled ?? false)
-          break
+          handlers.onPickMode?.(data.enabled ?? false);
+          break;
         case 'SCENE_PICK_GRANULARITY':
-          handlers.onPickGranularity?.(data.granularity ?? 'part')
-          break
+          handlers.onPickGranularity?.(data.granularity ?? 'part');
+          break;
         case 'SCENE_FLY_TO':
-          if (data.targetId) handlers.onFlyTo?.(data.targetId)
-          break
+          if (data.targetId) {
+            handlers.onFlyTo?.(data.targetId);
+          }
+          break;
         case 'SCENE_THEME':
-          if (data.mode) handlers.onTheme?.(data.mode)
-          break
+          if (data.mode) {
+            handlers.onTheme?.(data.mode);
+          }
+          break;
         case 'SCENE_RESET_CAMERA':
-          handlers.onResetCamera?.()
-          break
+          handlers.onResetCamera?.();
+          break;
         case 'SCENE_PATCH':
-          handlers.onPatch?.(data.payload)
-          break
+          handlers.onPatch?.(data.payload);
+          break;
         default:
           // 未知消息类型，忽略
-          break
+          break;
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[postMessage-host] 处理消息失败:', data.type, msg)
-      postToParent({ type: 'SCENE_ERROR', message: `${data.type}: ${msg}` })
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[postMessage-host] 处理消息失败:', data.type, msg);
+      postToParent({ type: 'SCENE_ERROR', message: `${data.type}: ${msg}` });
     }
-  }
+  };
 
-  window.addEventListener('message', listener)
-  return () => window.removeEventListener('message', listener)
-}
+  window.addEventListener('message', listener);
+  return () => window.removeEventListener('message', listener);
+};

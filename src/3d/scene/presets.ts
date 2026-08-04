@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-import type { LiveDataConfig } from './loader'
+import type { LiveDataConfig } from './loader';
 
 // ══════════════════════════════════════════════════════════════
 // 类型
@@ -22,6 +22,7 @@ import type { LiveDataConfig } from './loader'
 
 /** 场景预设：包含 scene / camera / lights 三部分，缺值时回落 */
 export interface ScenePreset {
+
   /** 预设名称（显示/调试用） */
   name: string
   scene?: NonNullable<LiveDataConfig['scene']>
@@ -35,6 +36,7 @@ export interface ScenePreset {
 
 /** 内置预设表 */
 const scenePresets: Record<string, ScenePreset> = {
+
   /** 深色室内/数字孪生（默认） */
   dark: {
     name: '深色数字孪生',
@@ -66,7 +68,9 @@ const scenePresets: Record<string, ScenePreset> = {
         castShadow: true,
         shadow: {
           mapSize: 2048,
-          camera: { near: 0.5, far: 100, left: -30, right: 30, top: 30, bottom: -30 },
+          camera: {
+            near: 0.5, far: 100, left: -30, right: 30, top: 30, bottom: -30,
+          },
         },
       },
     ],
@@ -78,7 +82,9 @@ const scenePresets: Record<string, ScenePreset> = {
     scene: {
       background: '#87CEEB',
       environment: { preset: 'city', intensity: 0.9 },
-      fog: { type: 'linear', color: '#aecbe6', near: 80, far: 220 },
+      fog: {
+        type: 'linear', color: '#aecbe6', near: 80, far: 220,
+      },
     },
     camera: {
       type: 'perspective',
@@ -104,7 +110,9 @@ const scenePresets: Record<string, ScenePreset> = {
         castShadow: true,
         shadow: {
           mapSize: 4096,
-          camera: { near: 0.5, far: 200, left: -60, right: 60, top: 60, bottom: -60 },
+          camera: {
+            near: 0.5, far: 200, left: -60, right: 60, top: 60, bottom: -60,
+          },
         },
       },
     ],
@@ -116,7 +124,9 @@ const scenePresets: Record<string, ScenePreset> = {
     scene: {
       background: '#2a2a2e',
       environment: { preset: 'warehouse', intensity: 0.8 },
-      fog: { type: 'linear', color: '#2a2a2e', near: 50, far: 150 },
+      fog: {
+        type: 'linear', color: '#2a2a2e', near: 50, far: 150,
+      },
     },
     camera: {
       type: 'perspective',
@@ -142,7 +152,9 @@ const scenePresets: Record<string, ScenePreset> = {
         castShadow: true,
         shadow: {
           mapSize: 2048,
-          camera: { near: 0.5, far: 80, left: -25, right: 25, top: 25, bottom: -25 },
+          camera: {
+            near: 0.5, far: 80, left: -25, right: 25, top: 25, bottom: -25,
+          },
         },
       },
       {
@@ -187,12 +199,14 @@ const scenePresets: Record<string, ScenePreset> = {
         castShadow: true,
         shadow: {
           mapSize: 1024,
-          camera: { near: 0.5, far: 30, left: -8, right: 8, top: 8, bottom: -8 },
+          camera: {
+            near: 0.5, far: 30, left: -8, right: 8, top: 8, bottom: -8,
+          },
         },
       },
     ],
   },
-}
+};
 
 // ══════════════════════════════════════════════════════════════
 // API
@@ -215,38 +229,36 @@ const scenePresets: Record<string, ScenePreset> = {
  * })
  * ```
  */
-export function registerScenePreset(key: string, preset: ScenePreset): void {
-  scenePresets[key] = preset
-}
+export const registerScenePreset = (key: string, preset: ScenePreset): void => {
+  scenePresets[key] = preset;
+};
 
 /** 获取已注册的预设（只读副本） */
-export function getScenePresets(): Readonly<Record<string, ScenePreset>> {
-  return { ...scenePresets }
-}
+export const getScenePresets = (): Readonly<Record<string, ScenePreset>> => ({ ...scenePresets });
 
 /**
  * 合并相机配置：按 type 只保留 perspective 或 orthographic 子字段——二者互斥，不同时存在。
  * - type 缺省按 'perspective'
  * - 先 spread（用户值覆盖预设）解析出对应子字段，再剔除另一子字段，避免歧义
  */
-function mergeCamera(
+const mergeCamera = (
   cfgCam: NonNullable<LiveDataConfig['camera']>,
   presetCam: NonNullable<LiveDataConfig['camera']> | undefined,
-): NonNullable<LiveDataConfig['camera']> {
-  const type = cfgCam.type ?? 'perspective'
+): NonNullable<LiveDataConfig['camera']> => {
+  const type = cfgCam.type ?? 'perspective';
   const merged: NonNullable<LiveDataConfig['camera']> = {
     ...presetCam,
     ...cfgCam,
     type,
-  }
+  };
   // perspective / orthographic 互斥：按 type 删除不相关的子字段
   if (type === 'orthographic') {
-    delete merged.perspective
+    delete merged.perspective;
   } else {
-    delete merged.orthographic
+    delete merged.orthographic;
   }
-  return merged
-}
+  return merged;
+};
 
 /**
  * 将用户传入的 LiveDataConfig 与指定预设合并。
@@ -258,24 +270,24 @@ function mergeCamera(
  * - type='perspective' 但没传 perspective 子字段 → 用预设的 perspective 兜底
  * - type='orthographic' 但没传 orthographic 子字段 → 用预设的 orthographic 兜底
  */
-export function mergeWithPreset(config: LiveDataConfig, presetKey: string): LiveDataConfig {
-  const preset = scenePresets[presetKey] ?? scenePresets.dark
-  const pScene = preset.scene
-  const pCamera = preset.camera
-  const pLights = preset.lights
+export const mergeWithPreset = (config: LiveDataConfig, presetKey: string): LiveDataConfig => {
+  const preset = scenePresets[presetKey] ?? scenePresets.dark;
+  const pScene = preset.scene;
+  const pCamera = preset.camera;
+  const pLights = preset.lights;
 
   return {
     version: config.version ?? '1.0',
     scene: config.scene
       ? {
-          ...pScene,
-          ...config.scene,
-          fog: config.scene.fog ?? pScene?.fog,
-          environment: config.scene.environment ?? pScene?.environment,
-        }
+        ...pScene,
+        ...config.scene,
+        fog: config.scene.fog ?? pScene?.fog,
+        environment: config.scene.environment ?? pScene?.environment,
+      }
       : { ...pScene },
     camera: config.camera ? mergeCamera(config.camera, pCamera) : { ...pCamera },
     lights: config.lights ?? pLights,
     objects: config.objects,
-  }
-}
+  };
+};

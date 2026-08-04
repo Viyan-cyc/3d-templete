@@ -25,27 +25,29 @@
 // 主入口（live-data 驱动）
 // ============================================================
 
-export { createScene3D } from './createScene3D'
+export { createScene3D } from './createScene3D';
 export type {
   Scene3DOptions,
   Scene3DHandle,
   SceneUpdatePatch,
   OrbitControlsInstance,
-} from './createScene3D'
+} from './createScene3D';
 
 // ---- 卡片系统 ----
-export type { CardDef, CardState } from './managers/card/types'
+export type { CardDef, CardState } from './managers/card/types';
 
 // ---- 管理器 ----
-export { CardManager, CardComponentRegistry, cardComponentRegistry } from './managers/card'
-export type { CardStateCallback, CardManagerOptions, CardScanRule, CardScanGroup, CardAnchorSpec } from './managers/card/types'
-export { ComponentManager, componentManager, registerComponentHandlers } from './managers/component'
-export type { ComponentHandler, ComponentContext } from './managers/component'
+export { CardManager, CardComponentRegistry, cardComponentRegistry } from './managers/card';
+export type {
+  CardStateCallback, CardManagerOptions, CardScanRule, CardScanGroup, CardAnchorSpec,
+} from './managers/card/types';
+export { ComponentManager, componentManager, registerComponentHandlers } from './managers/component';
+export type { ComponentHandler, ComponentContext } from './managers/component';
 
 // ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp, loadModelObjects } from './scene'
-export { registerScenePreset, getScenePresets } from './scene'
-export type { ScenePreset } from './scene'
+export { loadLiveDataConfig, applyLiveDataToApp, loadModelObjects } from './scene';
+export { registerScenePreset, getScenePresets } from './scene';
+export type { ScenePreset } from './scene';
 export type {
   LiveDataConfig,
   LiveDataCamera,
@@ -54,28 +56,32 @@ export type {
   LiveDataGeometry,
   LiveDataMaterial,
   ApplyLiveDataOptions,
-} from './scene'
+} from './scene';
 
 // ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
-export { hasComponent, resolveComponent, createComponentObject, initLibraryBridge } from './components'
+export {
+  hasComponent, resolveComponent, createComponentObject, initLibraryBridge,
+} from './components';
 
 // ---- 模型资产 + 加载 + 混元生成 ----
-export { modelRegistry, resolveModelSrc } from './models/registry'
-export { loadModel, assetProvider, httpProvider, providers as modelProviders, disposeModelCache } from './models/loader'
-export type { ModelProvider, LoadOpts } from './models/loader'
-export { hunyuanProvider, normalizeKey } from './models/hunyuan'
+export { modelRegistry, resolveModelSrc } from './models/registry';
+export {
+  loadModel, assetProvider, httpProvider, providers as modelProviders, disposeModelCache,
+} from './models/loader';
+export type { ModelProvider, LoadOpts } from './models/loader';
+export { hunyuanProvider, normalizeKey } from './models/hunyuan';
 
 // ---- 编辑态拾取（interactive 模式，阶段3 起）----
-export { ScenePicker } from './interaction/picker'
-export type { PickInfo } from './interaction/picker'
+export { ScenePicker } from './interaction/picker';
+export type { PickInfo } from './interaction/picker';
 
 // ---- 3D 组件：缓存 ----
-export { AssetPool } from './components'
+export { AssetPool } from './components';
 
 // ---- 基础设施 ----
-export { App3D } from './App3D'
-export { DebugOverlay } from './debug'
-export { AssetLoader, getAssetLoader } from './loaders/AssetLoader'
-export type { App3DOptions } from './App3D'
-export type { DebugOverlayOptions } from './debug'
-export type { SceneConfig } from './App3D'
+export { App3D } from './App3D';
+export { DebugOverlay } from './debug';
+export { AssetLoader, getAssetLoader } from './loaders/AssetLoader';
+export type { App3DOptions } from './App3D';
+export type { DebugOverlayOptions } from './debug';
+export type { SceneConfig } from './App3D';
