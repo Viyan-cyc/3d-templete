@@ -25,6 +25,7 @@ import {
 } from '@/3d'
 import { CardHost } from '@/adapters/vue'
 import { cardRules } from '@/adapters/vue/sceneCardRules'
+import { LiveDataPoller } from '@/adapters/live-data'
 
 // ---- 状态 ----
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -34,6 +35,8 @@ const error = ref('')
 const cardStates = ref<CardState[]>([])
 const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
 let handle: Scene3DHandle | null = null
+/** 定时更新轮询器（?update= 启动，走 handle.update 增量流程） */
+let livePoller: LiveDataPoller | null = null
 
 // ---- 生命周期 ----
 onMounted(async () => {
@@ -70,6 +73,27 @@ onMounted(async () => {
     //     geometry:{type:'sphere',params:{radius:1}}, material:{type:'standard',color:'#ff0'},
     //     position:[0,5,0] }] } })
     ;(window as unknown as { scene3d?: Scene3DHandle }).scene3d = handle
+
+    // 示例：定时更新 —— 按固定间隔请求模拟数据 → 走 handle.update 增量流程（仅 ?update= 时启动，默认场景不受影响）。
+    // 下载模板接入自己的数据时，把这里的 url 换成你的轮询接口、去掉 ?update 判断即可。
+    //   ?update=1          启动定时更新，用默认 live-data-handlers-update.json
+    //   ?update=foo.json   启动定时更新，指定更新文件
+    //   ?interval=1000     可选：间隔毫秒数（不传则取更新文件内的 intervalMs，再缺省 2000）
+    const params = new URLSearchParams(window.location.search)
+    const updateParam = params.get('update')
+    if (updateParam !== null) {
+      const updateUrl = (updateParam === '' || updateParam === '1')
+        ? 'live-data-handlers-update.json'
+        : updateParam
+      const intervalMs = Number(params.get('interval'))
+      livePoller = new LiveDataPoller({
+        url: `/${updateUrl}`,
+        intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : undefined,
+        onPatch: (patch) => handle?.update(patch),
+        onError: (err) => console.warn('[Scene3D] 定时更新轮询失败:', err),
+      })
+      await livePoller.start()
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[Scene3D] 加载失败:', msg)
@@ -79,6 +103,8 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  livePoller?.stop()
+  livePoller = null
   handle?.dispose()
   handle = null
 })

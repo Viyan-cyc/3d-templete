@@ -1,0 +1,92 @@
+{
+  "version": "1.0",
+  "_说明": "live-data-handlers-test.json 的定时更新数据。每帧是一个 SceneUpdatePatch（objects.upsert/remove），由 src/adapters/live-data/LiveDataPoller 按 intervalMs 轮询下发，走 handle.update 流程。访问 /?fetch=live-data-handlers-test.json&update=1&interval=2000 即可看效果（interval 可省略，缺省取本文件的 intervalMs=2000）。",
+  "intervalMs": 2000,
+  "frames": [
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-10.8, 0.5, 3], "material": { "type": "standard", "color": "#e74c3c", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 1, 3], "material": { "type": "standard", "color": "#3498db", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 1, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 0, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [0, 0, 0] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.5, 0], "scale": [1, 1, 1] },
+          { "id": "primText", "type": "mesh", "position": [0, 4, -1] },
+          { "id": "primAlert", "type": "mesh", "parentId": "sceneRoot", "position": [-12, 2.5, 3], "geometry": { "type": "box", "params": { "width": 0.5, "height": 0.5, "depth": 0.5 } }, "material": { "type": "basic", "color": "#ff3030" } }
+        ]
+      }
+    },
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-11.4, 0.5, 4.04], "material": { "type": "standard", "color": "#f39c12", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 1.35, 3], "material": { "type": "standard", "color": "#5dade2", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 1.26, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 45, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [30, 0, 45] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.76, 0], "scale": [1.09, 1.09, 1.09] },
+          { "id": "primText", "type": "mesh", "position": [0, 4.26, -1] }
+        ],
+        "remove": ["primAlert"]
+      }
+    },
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-12.6, 0.5, 4.04], "material": { "type": "standard", "color": "#2ecc71", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 1.35, 3], "material": { "type": "standard", "color": "#85c1e9", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 1.26, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 90, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [60, 0, 90] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.76, 0], "scale": [1.09, 1.09, 1.09] },
+          { "id": "primText", "type": "mesh", "position": [0, 4.26, -1] },
+          { "id": "primAlert", "type": "mesh", "parentId": "sceneRoot", "position": [-12, 2.67, 3], "geometry": { "type": "box", "params": { "width": 0.5, "height": 0.5, "depth": 0.5 } }, "material": { "type": "basic", "color": "#ff3030" } }
+        ]
+      }
+    },
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-13.2, 0.5, 3], "material": { "type": "standard", "color": "#2ecc71", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 1, 3], "material": { "type": "standard", "color": "#85c1e9", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 1, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 135, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [90, 0, 135] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.5, 0], "scale": [1, 1, 1] },
+          { "id": "primText", "type": "mesh", "position": [0, 4, -1] },
+          { "id": "rack1", "type": "component", "component": { "type": "rack", "params": { "levels": 5, "width": 2.4, "height": 2.4, "depth": 0.8 } } }
+        ],
+        "remove": ["primAlert"]
+      }
+    },
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-12.6, 0.5, 1.96], "material": { "type": "standard", "color": "#f39c12", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 0.65, 3], "material": { "type": "standard", "color": "#5dade2", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 0.74, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 180, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [120, 0, 180] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.24, 0], "scale": [0.91, 0.91, 0.91] },
+          { "id": "primText", "type": "mesh", "position": [0, 3.74, -1] },
+          { "id": "primAlert", "type": "mesh", "parentId": "sceneRoot", "position": [-12, 2.33, 3], "geometry": { "type": "box", "params": { "width": 0.5, "height": 0.5, "depth": 0.5 } }, "material": { "type": "basic", "color": "#ff3030" } }
+        ]
+      }
+    },
+    {
+      "objects": {
+        "upsert": [
+          { "id": "primBox", "type": "mesh", "position": [-11.4, 0.5, 1.96], "material": { "type": "standard", "color": "#e74c3c", "roughness": 0.5, "metalness": 0.1 } },
+          { "id": "primSphere", "type": "mesh", "position": [-10, 0.65, 3], "material": { "type": "standard", "color": "#3498db", "roughness": 0.3, "metalness": 0.2 } },
+          { "id": "primCylinder", "type": "mesh", "position": [-8, 1, 3], "scale": [1, 0.74, 1] },
+          { "id": "primCone", "type": "mesh", "position": [-6, 1, 3], "rotation": [0, 225, 0] },
+          { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [150, 0, 225] },
+          { "id": "grpChildBox", "type": "mesh", "position": [0, 0.24, 0], "scale": [0.91, 0.91, 0.91] },
+          { "id": "primText", "type": "mesh", "position": [0, 3.74, -1] }
+        ],
+        "remove": ["primAlert"]
+      }
+    }
+  ]
+}
