@@ -19,7 +19,10 @@ import type { Component } from 'vue'
 import {
   createScene3D,
   loadLiveDataConfig,
+  toUpdatePatch,
+  isUpdatePatch,
   type Scene3DHandle,
+  type SceneUpdatePatch,
   type CardState,
   type CardComponentRegistry,
 } from '@/3d'
@@ -74,7 +77,9 @@ onMounted(async () => {
     //     position:[0,5,0] }] } })
     ;(window as unknown as { scene3d?: Scene3DHandle }).scene3d = handle
 
-    // 示例：定时更新 —— 按固定间隔请求模拟数据 → 走 handle.update 增量流程（仅 ?update= 时启动，默认场景不受影响）。
+    // 示例：定时更新 —— 按固定间隔请求模拟数据，按格式自动分派：
+    //   帧表 / 增量 patch → handle.update；全量产品数据（mock-tree-update.json 那种）→ toUpdatePatch 转换后 handle.update。
+    //   仅 ?update= 时启动，默认场景不受影响。
     // 下载模板接入自己的数据时，把这里的 url 换成你的轮询接口、去掉 ?update 判断即可。
     //   ?update=1          启动定时更新，用默认 live-data-handlers-update.json
     //   ?update=foo.json   启动定时更新，指定更新文件
@@ -89,7 +94,13 @@ onMounted(async () => {
       livePoller = new LiveDataPoller({
         url: `/${updateUrl}`,
         intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : undefined,
-        onPatch: (patch) => handle?.update(patch),
+        onPatch: (data) => {
+          if (isUpdatePatch(data)) {
+            handle?.update(data as SceneUpdatePatch)
+          } else {
+            handle?.update(toUpdatePatch(data), data)
+          }
+        },
         onError: (err) => console.warn('[Scene3D] 定时更新轮询失败:', err),
       })
       await livePoller.start()

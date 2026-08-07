@@ -16,7 +16,7 @@ export const libraryHandler: ComponentHandler = {
     if (!name) {
       return null;
     }
-    const obj = createComponentObject(name, data.component?.options ?? {});
+    const obj = createComponentObject(name, data.component?.params ?? {});
     if (!obj) {
       return null;
     }

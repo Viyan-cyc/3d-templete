@@ -1,0 +1,50 @@
+{
+  "_说明": "产品嵌套数据示例：buildings/floors/walls/door/ceiling/roads/water/fishes/wave，覆盖数组→数组/数组→对象/对象→数组/对象→对象四种嵌套。加载方式 ?scene=mock-tree.json",
+  "buildings": [
+    {
+      "id": "building",
+      "floors": [
+        {
+          "id": "FLOOR1",
+          "height": 3,
+          "walls": [
+            {
+              "id": "wall1",
+              "path": [{"x":0,"y":0,"z":0}, {"x":5,"y":0,"z":0}, {"x":5,"y":0,"z":4}, {"x":0,"y":0,"z":4}],
+              "position": {"x":0,"y":0,"z":0},
+              "info": {}
+            }
+          ],
+          "door": {
+            "id": "door1",
+            "style": 1,
+            "direction": {"x":1,"y":0,"z":0}
+          }
+        }
+      ],
+      "ceiling": {
+        "id": "ceiling1",
+        "position": [0, 3, 0],
+        "rotation": [0, 0, 0],
+        "scale": [1, 1, 1],
+        "segment": 23
+      }
+    }
+  ],
+  "roads": [
+    {"id": "road1", "path": [{"x":6,"y":0,"z":0}, {"x":10,"y":0,"z":0}], "arrow": 1},
+    {"id": "road2", "path": [{"x":6,"y":0,"z":2}, {"x":10,"y":0,"z":2}], "arrow": 3}
+  ],
+  "water": {
+    "id": "water",
+    "style": 111,
+    "fishes": [
+      {"id": "fishe1", "type": 11, "position": {"x":8,"y":0,"z":5}, "other": 123}
+    ],
+    "wave": {
+      "id": "wave",
+      "range": 1,
+      "position": {"x":8,"y":0,"z":5}
+    }
+  }
+}

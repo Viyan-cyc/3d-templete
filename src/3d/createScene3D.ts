@@ -31,12 +31,15 @@ import {
   loadModelObjects,
   removeObjects,
   upsertObjects,
+  registerAdapters,
+  normalizeToModel,
   type ObjectIndex,
   type LiveDataConfig,
   type LiveDataObject,
 } from './scene';
 import { ScenePicker } from './interaction/picker';
 import { registerComponentHandlers, disposeComponentHandlers } from './managers';
+import { sharedState } from './managers/component/handlers/base/shared';
 
 export interface Scene3DControlsOptions {
   minDistance?: number
@@ -99,14 +102,23 @@ export interface Scene3DHandle {
   app: App3D
   cardManager: CardManager
 
+  /** 原始数据（投影不替换：归一化前的产品数据原样保留，供业务侧读 roads.length 等） */
+  source: unknown
+
+  /** 数据层索引：id → LiveDataObject（归一化后实体的当前数据，按 id 查；update 时维护） */
+  dataMap: Map<string, LiveDataObject> | undefined
+
   /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
   controls: OrbitControlsInstance
 
   /** 订阅卡片状态变化，喂给 <CardHost :cards> */
   onCardState(cb: CardStateCallback): () => void
 
-  /** 物体级增量更新（按 id 增删改），自动同步受影响的卡片 */
-  update(patch: SceneUpdatePatch): void
+  /**
+   * 物体级增量更新（按 id 增删改），自动同步受影响的卡片。
+   * source 可选：传入则同步更新 handle.source / sharedState.source（产品全量更新场景传原始数据）。
+   */
+  update(patch: SceneUpdatePatch, source?: unknown): void
 
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
   setDebug(mode: boolean): void
@@ -233,6 +245,7 @@ const createHandle = (params: {
   objectIndex: ObjectIndex
   cardRules: CardScanRule[] | undefined
   resizeObserver: ResizeObserver
+  source: unknown
   picker?: ScenePicker
   flyTo?: (targetId: string) => void
   setTheme?: (mode: 'light' | 'dark') => void
@@ -243,18 +256,40 @@ const createHandle = (params: {
     picker, flyTo, setTheme, resetCamera,
   } = params;
   let disposed = false;
+  let source = params.source;
 
   return {
     app,
     cardManager,
     controls,
+    get source() {
+      return source;
+    },
+    get dataMap() {
+      return sharedState.dataMap;
+    },
     onCardState: (cb) => cardManager.onStateChange(cb),
-    update(patch: SceneUpdatePatch): void {
+    update(patch: SceneUpdatePatch, sourceData?: unknown): void {
+      if (sourceData !== undefined) {
+        source = sourceData;
+        sharedState.source = sourceData;
+      }
+      const map = sharedState.dataMap;
       const changed: string[] = [];
       if (patch.objects?.remove?.length) {
+        if (map) {
+          for (const id of patch.objects.remove) {
+            map.delete(id);
+          }
+        }
         changed.push(...removeObjects(app.scene, objectIndex, patch.objects.remove));
       }
       if (patch.objects?.upsert?.length) {
+        if (map) {
+          for (const obj of patch.objects.upsert) {
+            map.set(obj.id, obj);
+          }
+        }
         changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert));
       }
       cardManager.refreshCards(app.scene, cardRules ?? [], changed);
@@ -297,8 +332,9 @@ export const createScene3D = async (
   // URL 参数优先于 options.debug
   const debug = readDebugFromURL() || options.debug || false;
 
-  // 0. 注册业务 handler（幂等：重复调用不会重复注册，只是覆盖）
+  // 0. 注册业务 handler + 数据 adapter（幂等：重复调用不会重复注册，只是覆盖）
   registerComponentHandlers();
+  registerAdapters();
 
   // 1. 3D 引擎
   const app = new App3D({
@@ -306,9 +342,15 @@ export const createScene3D = async (
   });
 
   // 2. 应用数据（环境 + 物体全量建；内部 app.setCamera 替换相机、含 PMREM 环境），拿到 id→Object3D 索引供 update 用
+  //    先把任意产品数据格式归一化成扁平 LiveDataConfig（objects[]），再喂 applyLiveDataToApp + loadModelObjects
+  const model = normalizeToModel(data);
+  const normalized: LiveDataConfig = { ...data, objects: model.objects };
+  // 供 handler 通过 ctx.shared.source 读原数据 / ctx.shared.dataMap 按 id 查数据
+  sharedState.source = data;
+  sharedState.dataMap = new Map<string, LiveDataObject>(model.objects.map((o) => [o.id, o]));
   const width = canvas.clientWidth || container.clientWidth || 1;
   const height = canvas.clientHeight || container.clientHeight || 1;
-  const objectIndex: ObjectIndex = applyLiveDataToApp(app, data, {
+  const objectIndex: ObjectIndex = applyLiveDataToApp(app, normalized, {
     viewSize: { width, height },
     preset,
   });
@@ -335,7 +377,7 @@ export const createScene3D = async (
   resizeObserver.observe(container);
 
   // 9. 异步加载外部模型（占位节点已在 applyLiveDataToApp 中创建）
-  loadModelObjects(objectIndex, data.objects).catch((err) => {
+  loadModelObjects(objectIndex, normalized.objects).catch((err) => {
     console.error('[createScene3D] 模型加载失败:', err);
   });
 
@@ -346,7 +388,7 @@ export const createScene3D = async (
   const {
     picker, flyTo, setTheme, resetCamera,
   } = interactive
-    ? setupInteractive(app, data, controls)
+    ? setupInteractive(app, normalized, controls)
     : {
       picker: undefined, flyTo: undefined, setTheme: undefined, resetCamera: undefined,
     };
@@ -358,6 +400,7 @@ export const createScene3D = async (
     objectIndex,
     cardRules,
     resizeObserver,
+    source: data,
     picker,
     flyTo,
     setTheme,

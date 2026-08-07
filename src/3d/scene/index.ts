@@ -32,6 +32,16 @@ export type { ObjectIndex } from './objects';
 export { registerScenePreset, getScenePresets } from './presets';
 export type { ScenePreset } from './presets';
 
+// ---- 产品数据归一化适配层 ----
+export {
+  registerAdapters, normalizeConfig, normalizeToModel, resolveAdapter,
+  registerTypeMappings, resolveTypeMapping, clearTypeMappings,
+  toVec, toPath, isEntityNode, toUpdatePatch, isUpdatePatch,
+} from './adapters';
+export type {
+  SceneModel, Adapter, AdapterEntry, TypeMapping, TypeRegistry, EntityNode,
+} from './adapters';
+
 /**
  * 将 live-data 场景配置应用到已有的 App3D 实例(一次性建场景)。
  *

@@ -85,20 +85,19 @@ export interface LiveDataObject {
 
 export interface LiveDataComponent {
 
-  /** 内置 builder 组件类型名（如 rack），走对应垂域 handler（如 rackHandler） */
-  type: string
-  params?: Record<string, number | string>
+  /** 内置 builder 组件类型名（如 rack），走对应垂域 handler（如 rackHandler）。library 组件用 name，可省略 */
+  type?: string
+
+  /** 组件参数（library 组件时透传给库构造器当 options；builder 时给 handler）。统一用 params，支持复杂结构（path/walls 等） */
+  params?: Record<string, unknown>
 
   /** 3d-components 组件类名（Grid/Wall/HeatMesh 等），resolver 链最高优先级，走 library-bridge */
   name?: string
-
-  /** 透传给 3d-components 组件构造器的 options（对齐 ComponentOptions 对象模式） */
-  options?: Record<string, unknown>
 }
 
 export interface LiveDataGeometry {
   type: string
-  params?: Record<string, number | string>
+  params?: Record<string, unknown>
 }
 
 export interface LiveDataMaterial {

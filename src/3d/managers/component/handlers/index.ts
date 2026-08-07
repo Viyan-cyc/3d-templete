@@ -21,7 +21,14 @@ export { sharedState, ComponentSharedState } from './base/shared';
  * match 命中且 create 返回非 null 者胜出；返回 null 则回落下一项。
  */
 const creationChain: CreationEntry[] = [
-  { key: 'library', match: (d) => Boolean(d.component?.name) && hasComponent(d.component!.name), handler: libraryHandler },
+  {
+    key: 'library',
+    match: (d) => {
+      const name = d.component?.name;
+      return name ? hasComponent(name) : false;
+    },
+    handler: libraryHandler,
+  },
   { key: 'rack', match: (d) => d.component?.type === 'rack', handler: rackHandler },
   { key: 'model', match: (d) => Boolean(d.src), handler: modelHandler },
   { key: 'primitive', match: (d) => Boolean(d.geometry) || d.type === 'mesh', handler: primitiveHandler },

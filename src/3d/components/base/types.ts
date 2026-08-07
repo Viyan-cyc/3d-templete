@@ -9,8 +9,8 @@ export interface ComponentOptions {
   geometry?: LiveDataGeometry
   material?: LiveDataMaterial
 
-  /** component.params（builder 参数等） */
-  params?: Record<string, number | string>
+  /** component.params（library 库组件构造器入参 / builder 参数，统一用 params） */
+  params?: Record<string, unknown>
   position?: number[]
   rotation?: number[]
   scale?: number[]

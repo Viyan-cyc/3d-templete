@@ -58,6 +58,16 @@ export type {
   ApplyLiveDataOptions,
 } from './scene';
 
+// ---- 产品数据归一化适配层 ----
+export {
+  registerAdapters, normalizeConfig, normalizeToModel, resolveAdapter,
+  registerTypeMappings, resolveTypeMapping, clearTypeMappings,
+  toVec, toPath, isEntityNode, toUpdatePatch, isUpdatePatch,
+} from './scene';
+export type {
+  SceneModel, Adapter, TypeMapping, TypeRegistry,
+} from './scene';
+
 // ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
 export {
   hasComponent, resolveComponent, createComponentObject, initLibraryBridge,

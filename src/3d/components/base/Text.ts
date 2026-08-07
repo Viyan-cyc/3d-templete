@@ -10,7 +10,7 @@ import { applyTransform, applyShadow } from './transform';
  */
 export class TextComponent extends THREE.Mesh {
   constructor(opts: ComponentOptions) {
-    const tp = (opts.geometry?.params ?? {}) as Record<string, unknown>;
+    const tp = opts.geometry?.params ?? {};
     const text = String(tp.text ?? 'Text');
     const size = Number(tp.size) > 0 ? Number(tp.size) : 1;
 

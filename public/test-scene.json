@@ -25,7 +25,7 @@
     },
     {
       "id": "grid-1", "type": "component", "parentId": null,
-      "component": { "type": "", "name": "Grid", "options": { "size": 10, "division": 10 } },
+      "component": { "type": "", "name": "Grid", "params": { "size": 10, "division": 10 } },
       "position": [0, 0.01, 0]
     },
     {

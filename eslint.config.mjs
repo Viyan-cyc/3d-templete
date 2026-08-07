@@ -41,7 +41,7 @@ export default defineConfig([
         },
         allowImportExportEverywhere: true,
         requireConfigFile: false,
-        project: './tsconfig.json',
+        project: './tsconfig.app.json',
         tsconfigRootDir: __dirname,
         extraFileExtensions: ['.vue', '.svelte'],
         warnOnUnsupportedTypeScriptVersion: false,
