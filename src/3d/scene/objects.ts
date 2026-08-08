@@ -10,10 +10,10 @@
  */
 import * as THREE from 'three';
 import type { LiveDataObject } from './loader';
-import { loadModel } from '../models/loader';
 import { componentManager, type ComponentContext, type ObjectIndex } from '../managers/component/ComponentManager';
 import { sharedState } from '../managers/component/handlers/base/shared';
-import { applyTransform, createGeometry, createLiveMaterial } from '../components';
+import { getResourceManager } from '../resources';
+import { applyTransform, createGeometry } from '../components';
 
 // ObjectIndex 定义在 ComponentManager（manager 层），此处 re-export 供 scene/index、3d/index 取用
 export type { ObjectIndex } from '../managers/component/ComponentManager';
@@ -97,7 +97,7 @@ const patchObject = (obj: THREE.Object3D, def: LiveDataObject): void => {
       } else {
         old?.dispose();
       }
-      mesh.material = createLiveMaterial(def.material);
+      mesh.material = getResourceManager().createMaterialFromLive(def.material);
     }
     if (def.geometry) {
       const geo = createGeometry(def.geometry);
@@ -169,7 +169,7 @@ export const buildObjects = (
       // 解析失败(如未知 geometry/src/builder 名):打 warn 便于定位。
       skippedCount++;
       console.warn(`[objects] 无法创建物体，跳过: id=${oc.id} type=${oc.type}` +
-          ` component.name=${oc.component?.name} component.type=${oc.component?.type}` +
+          ` component.type=${oc.component?.type}` +
           ` src=${oc.src ?? '-'} geometry=${oc.geometry?.type ?? '-'}`);
     }
   }
@@ -302,7 +302,7 @@ export const loadModelObjects = async (
     }
 
     try {
-      const model = await loadModel(src, {
+      const model = await getResourceManager().cloneModel(src, {
         castShadow: def.castShadow,
         receiveShadow: def.receiveShadow,
       });

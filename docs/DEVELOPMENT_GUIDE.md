@@ -46,7 +46,7 @@ LiveDataConfig (JSON)  →  scene 层解析  →  Three.js 场景  →  CSS2D �
 ```
 data (LiveDataObject)
   → manager (ComponentManager 按 kind 链分派)
-    → handlers (creation chain: library > rack > model > primitive > group)
+    → handlers (creation chain: library > example > model > primitive > group)
       → components (new XxxComponent(opts) / createComponentObject)
 ```
 
@@ -75,7 +75,7 @@ src/
 │   ├── components/                  # 组件层（三种组件来源都在此）
 │   │   ├── index.ts                 # 出口 + registerAllComponents()
 │   │   ├── AssetPool.ts             # Geometry/Material 缓存池（同参数共享实例）
-│   │   ├── library-bridge.ts        # @cyc/3d-components 的 name→Ctor 映射（自动扫描）
+│   │   ├── library-bridge.ts        # @cyc/3d-components 的 type→Ctor 映射（自动扫描）
 │   │   ├── base/                    # 本地通用底座（无业务属性）
 │   │   │   ├── index.ts             # 底座出口
 │   │   │   ├── types.ts             # ComponentOptions（handler→组件的统一 options）
@@ -83,12 +83,11 @@ src/
 │   │   │   ├── Text.ts              # TextComponent（canvas 贴图文字）
 │   │   │   ├── Model.ts             # ModelComponent（带 src 的占位 Group）
 │   │   │   ├── geometry.ts          # createGeometry（8 种基础几何体）
-│   │   │   ├── material.ts          # createLiveMaterial（带缓存的材质工厂）
 │   │   │   ├── transform.ts         # applyTransform / applyShadow / parseVec3
 │   │   │   └── assets.ts            # 组件层共享的 AssetPool 单例
-│   │   └── warehouse/               # 本地垂域组件
+│   │   └── exampleField/            # 本地垂域组件
 │   │       ├── index.ts
-│   │       └── rack.ts              # RackComponent（程序化货架：4 立柱 + N 搁板）
+│   │       └── example.ts           # ExampleComponent（纯展示：模型 + 主题材质由 exampleHandler 加载传入）
 │   │
 │   ├── managers/                    # 管理器
 │   │   ├── index.ts
@@ -109,8 +108,8 @@ src/
 │   │           │   ├── model.ts     # modelHandler（带 src 的占位 Group）
 │   │           │   ├── primitive.ts # primitiveHandler（基础几何体 + 文字）
 │   │           │   └── group.ts     # groupHandler（空 Group）
-│   │           └── warehouse/
-│   │               └── rack.ts      # rackHandler（new RackComponent）
+│   │           └── exampleField/
+│   │               └── example.ts   # exampleHandler（克隆 example.glb + copy 取主题材质，传给 ExampleComponent）
 │   │
 │   ├── models/                      # 模型资产 + 加载
 │   │   ├── registry.ts              # 本地模型注册表（Vite ?url）+ resolveModelSrc
@@ -187,8 +186,8 @@ src/
 │     └─ buildObjects()            ← 全量建物体（两遍：create → 挂父） │
 │         └─ componentManager.create(data, ctx)                     │
 │             按 kind 链优先级遍历：                                  │
-│             ① library  component.name + hasComponent → libraryHandler│
-│             ② rack     component.type==='rack'      → rackHandler   │
+│             ① library  component.type + hasComponent → libraryHandler│
+│             ② example  component.type==='example'    → exampleHandler │
 │             ③ model    src                          → modelHandler  │
 │             ④ primitive geometry / type==='mesh'    → primitiveHandler│
 │             ⑤ group     type==='group'              → groupHandler  │
@@ -229,7 +228,7 @@ src/
 
 import * as THREE from 'three';
 import type { ComponentOptions } from '../base/types';
-import { createLiveMaterial } from '../base/material';
+import { getResourceManager } from '../../resources';
 import { assetPool } from '../base/assets';
 import { applyTransform, applyShadow } from '../base/transform';
 
@@ -244,7 +243,7 @@ export class ConveyorComponent extends THREE.Group {
     const length = Number(p.length) > 0 ? Number(p.length) : 4;
     const width  = Number(p.width)  > 0 ? Number(p.width)  : 1;
     const height = Number(p.height) > 0 ? Number(p.height) : 0.5;
-    const mat = createLiveMaterial(opts.material);
+    const mat = getResourceManager().createMaterialFromLive(opts.material);
 
     // 主带面：用 assetPool.getGeometry 缓存，相同参数只创建一次
     const beltGeo = assetPool.getGeometry(
@@ -304,10 +303,10 @@ export const conveyorHandler: ComponentHandler = {
     return new ConveyorComponent(toOptions(data));
   },
 
-  // 可选：就地更新（结构参数变化时重建子节点，见 rackHandler 示例）
+  // 可选：就地更新（结构参数变化时重建子节点，见 §5.3 通用 update 写法）
   update(obj: THREE.Object3D, data: LiveDataObject, _ctx: ComponentContext): boolean {
     // 仅改 transform 时可直接回落默认 patchObject（return false）；
-    // 若 params 变化需要重建子节点，参考 rackHandler.update。
+    // 若 params 变化需要重建子节点，参考通用 update 写法（见 §5.3）。
     applyTransform(obj, data);
     return true; // 已处理，跳过默认 patchObject
   },
@@ -320,8 +319,8 @@ export const conveyorHandler: ComponentHandler = {
 import { conveyorHandler } from './industrial/conveyor';
 
 const creationChain: CreationEntry[] = [
-  { key: 'library',   match: (d) => Boolean(d.component?.name) && hasComponent(d.component!.name), handler: libraryHandler },
-  { key: 'rack',      match: (d) => d.component?.type === 'rack',      handler: rackHandler },
+  { key: 'library',   match: (d) => hasComponent(d.component?.type ?? ''), handler: libraryHandler },
+  { key: 'example',   match: (d) => d.component?.type === 'example',   handler: exampleHandler },
   { key: 'conveyor',  match: (d) => d.component?.type === 'conveyor',  handler: conveyorHandler }, // ← 新增
   { key: 'model',     match: (d) => Boolean(d.src),                    handler: modelHandler },
   { key: 'primitive', match: (d) => Boolean(d.geometry) || d.type === 'mesh', handler: primitiveHandler },
@@ -352,8 +351,10 @@ const creationChain: CreationEntry[] = [
 - **必须 extend `THREE.Mesh` 或 `THREE.Group`**（组件类就是 Three 对象本身，没有包装层）
 - 构造器签名固定：`constructor(opts: ComponentOptions)`
 - 在构造器里：建内容 → `applyTransform(this, opts)` → `applyShadow(this, opts)` → 给子节点写 `userData.id = ${prefix}_${child.name}`
-- 使用 `assetPool.getGeometry(key, factory)` 缓存几何体，使用 `createLiveMaterial(opts.material)` 取缓存材质，避免同参数重复创建
-- 子 mesh 带 `name`（如 `belt`、`postBL`），供 `parentId` 引用、raycast 识别、卡片锚点选取
+- 使用 `assetPool.getGeometry(key, factory)` 缓存几何体；材质走 `getResourceManager().createMaterialFromLive(opts.material)`（贴图经 AssetCache 去重）
+- 子 mesh 带 `name`（如 `belt`、`body`），供 `parentId` 引用、raycast 识别、卡片锚点选取
+- **外部模型/贴图组件的另一模式**：若组件用外部 glb + 贴图（如 `ExampleComponent`），资源创建不放构造器——handler `cloneModel` 取模型 + `copy`/`clone` 取主题材质（MaterialManager 管理，支持 `setTheme` 换肤；贴图作为 `map:{url}` 写在 register-materials 的 themes 里），通过 `setResources(model, material)` 异步传入；组件保持纯展示。详见 [exampleField/example.ts](../src/3d/components/exampleField/example.ts) 与对应 [handler](../src/3d/managers/component/handlers/exampleField/example.ts)
+- **纯色材质（无贴图）**：`MaterialConfig` 去掉 `map` 字段、用 `color` 配色即可（register-materials 的 `exampleFlat` 即此）；handler 里把 `copy`/`clone` 的 key 换成 `'exampleFlat'` 即用纯色材质
 
 ### 4.4 ComponentOptions
 
@@ -409,15 +410,18 @@ interface ComponentContext {
 
 参见 [§4.2](#42-创建步骤)——新组件类 + handler + 链项三件套。若只想为已有组件类加业务逻辑（状态变色、动画等），在 handler 的 `update`/`delete` 里实现即可，不必新建组件类。
 
-### 5.3 就地更新示例（参考 rackHandler）
+### 5.3 就地更新示例（通用写法，参考已删除的 rackHandler）
 
-当组件的 **结构参数**（如货架层数 `levels`）变化时，默认 `patchObject` 只能改 transform/material/geometry，改不了结构——此时 handler 自行重建子节点：
+当组件的 **结构参数** 变化时，默认 `patchObject` 只能改 transform/material/geometry，改不了结构——此时 handler 自行重建子节点：
 
 ```ts
-// 参考 src/3d/managers/component/handlers/warehouse/rack.ts
+// 注：此为「组件有结构参数需同步重建」的通用写法，适用于构造器内建内容的组件（如已删除的 rack）。
+// ExampleComponent 的资源由 handler 异步加载（setResources）且无结构参数，不走此写法——
+// 其结构变更应直接 remove 旧对象 + 经 handler 重新 create。
+// 通用 update 写法（参考已删除的 rackHandler）
 update(obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext): boolean {
-  // 用新 params 重建一个货架
-  const fresh = new RackComponent(toOptions(data));
+  // 用新 params 重建一个组件实例（构造器内同步建内容）
+  const fresh = new ConveyorComponent(toOptions(data));
 
   // 旧子节点：从 index 移除并脱离父（缓存资源不 dispose，避免误释放共享资源）
   for (const child of Array.from(obj.children)) {
@@ -444,25 +448,25 @@ update(obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext): boolea
 
 ### 5.5 类型匹配规则
 
-创建走 kind 链的 `match` 函数（按 data 形状判断），与旧版「`component.name` > `component.type`」一致但更精细：
+创建走 kind 链的 `match` 函数（按 data 形状判断）——`component.type` 命中 library-bridge 走库，否则查垂域 type 链：
 
 | kind | match 条件 | handler | 说明 |
 |------|-----------|---------|------|
-| `library` | `component.name` 存在且 `hasComponent(name)` | libraryHandler | 3d-components 组件，优先级最高 |
-| `rack` | `component.type === 'rack'` | rackHandler | 内置垂域组件 |
+| `library` | `component.type` 存在且 `hasComponent(type)` | libraryHandler | 3d-components 组件，优先级最高 |
+| `example` | `component.type === 'example'` | exampleHandler | 内置垂域组件 |
 | `model` | `src` 存在 | modelHandler | 带 src 的占位 Group（异步填充） |
 | `primitive` | `geometry` 存在 或 `type === 'mesh'` | primitiveHandler | 基础几何体 + 文字 |
 | `group` | `type === 'group'` | groupHandler | 空 Group |
 
 ```jsonc
-// 匹配 library 的写法（component.name 命中 library-bridge）
-{ "component": { "name": "HeatMesh", "options": { ... } } }
+// 匹配 library 的写法（component.type 命中 library-bridge）
+{ "component": { "type": "HeatMesh", "params": { ... } } }
 
-// 匹配 rack 的写法（component.type==='rack'）
-{ "component": { "type": "rack", "params": { "levels": 5 } } }
+// 匹配 example 的写法（component.type==='example'）
+{ "component": { "type": "example" } }
 
-// name 未命中 library-bridge 时回落：先查 type 链，再 src，再 geometry
-{ "component": { "name": "NotExists", "type": "rack" } }  // name 不命中 → rack 命中
+// type 未命中 library-bridge 时回落：先查垂域 type 链，再 src，再 geometry
+{ "component": { "type": "NotExists" } }  // 不命中库 → 回落查 type 链（example 等）
 ```
 
 ---
@@ -485,10 +489,10 @@ update(obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext): boolea
 
 ```json
 {
-  "id": "windmill01",
+  "id": "example01",
   "type": "glb",
   "parentId": "farmZone",
-  "src": "asset:windmill",
+  "src": "asset:example",
   "position": [10, 0, 5],
   "castShadow": true,
   "receiveShadow": true
@@ -503,20 +507,20 @@ update(obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext): boolea
 
 ### 6.3 注册本地模型
 
-在 [models/registry.ts](../src/3d/models/registry.ts) 中添加条目。模型文件放在 **`src/3d/models/`** 目录下（与 registry 同目录），用 Vite `?url` 导入：
+在 [models/registry.ts](../src/3d/models/registry.ts) 中添加条目。模型文件放在 **`src/3d/assets/models/`** 目录下，用 Vite `?url` 导入：
 
 ```ts
 // src/3d/models/registry.ts
-import windmillUrl from './windmill.glb?url';   // ← 相对路径，文件在 src/3d/models/
+import exampleUrl from './example.glb?url';   // ← 模型文件在 src/3d/assets/models/
 
 export const modelRegistry: Record<string, string> = {
-  windmill: windmillUrl,
+  example: exampleUrl,
   // 新增模型在这里加
 };
 ```
 
 `src` 解析（`resolveModelSrc`）：
-- `asset:windmill` → 去掉前缀查 `modelRegistry['windmill']`，拿到带 hash 的编译 URL
+- `asset:example` → 去掉前缀查 `modelRegistry['example']`，拿到带 hash 的编译 URL
 - `/models/xxx.glb` 或 `https://...` → 原样作为 URL
 
 ---
@@ -548,9 +552,14 @@ interface LiveDataMaterial {
 
 ### 7.2 材质工厂与缓存
 
-材质由 [components/base/material.ts](../src/3d/components/base/material.ts) 的 `createLiveMaterial(matDef)` 创建，内部 `switch` 分发到 `MeshStandardMaterial` / `MeshPhongMaterial` / `MeshBasicMaterial` / `MeshPhysicalMaterial`，未知 `type` 回落 `MeshNormalMaterial`。
+模式A 内联材质（数据 `material` 字段）由 [ResourceManager](../src/3d/resources/ResourceManager.ts) 创建：
 
-缓存由 `AssetPool` 单例（`assetPool`）做：相同参数（type + color + roughness + metalness + transmission + clearcoat + ior + thickness + sheen + transparent + opacity）共享同一个 `Material` 实例。组件类构造器调 `createLiveMaterial(opts.material)` 即自动走缓存，无需手动管理。
+- `createMaterialFromLive(matDef)` — 从 LiveDataMaterial 建（`undefined` 回落 `MeshNormalMaterial`），内部转 MaterialConfig 后建实例
+- `createMaterial(config)` — 从 MaterialConfig 直接建实例
+
+类型分发与属性写入复用 3d-components 的 `createMaterial` / `applySyncProps`（standard / basic / physical / phong / lambert），未知 `type` 回落 `MeshStandardMaterial`。贴图（`map` 等槽位）经 AssetCache 异步回填到同一材质实例、按 URL 去重缓存；材质实例本身不缓存（每次 `new`，模式A 场景量小无需去重）。
+
+需换肤联动的材质走模式B（[register-materials](../src/3d/resources/register-materials.ts) 注册，`copy`/`clone` 取用，`setTheme` 原地改写），见 §7.5。
 
 ### 7.3 在 JSON 中写材质
 
@@ -573,14 +582,17 @@ interface LiveDataMaterial {
 
 ### 7.4 在代码中动态换材质
 
-在 handler 的 `update` 中，可用 `createLiveMaterial`（带缓存）生成材质并应用到子树：
+在 handler 的 `update` 中，用 ResourceManager 的 `createMaterialFromLive`（模式A，从数据 `material` 字段）生成材质并应用到子树：
 
 ```ts
-import { createLiveMaterial } from '../../../components';
+import type * as THREE from 'three';
+import type { ComponentContext } from '../../ComponentManager';
+import type { LiveDataObject } from '../../../../scene/loader';
 
-update(obj: THREE.Object3D, data: LiveDataObject, _ctx: ComponentContext) {
+// handler 对象的 update：
+update(obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext) {
   if (data.material) {
-    const mat = createLiveMaterial(data.material);
+    const mat = ctx.shared.resources.createMaterialFromLive(data.material);
     obj.traverse((child) => {
       const mesh = child as THREE.Mesh;
       if (mesh.isMesh) {
@@ -594,6 +606,35 @@ update(obj: THREE.Object3D, data: LiveDataObject, _ctx: ComponentContext) {
   return true;
 }
 ```
+
+### 7.5 主题材质：copy vs clone（模式B）
+
+走 MaterialManager 的主题材质（[register-materials](../src/3d/resources/register-materials.ts) 注册），handler 用 `copy` / `clone` 取用（对齐 MaterialManager，引用不变、换肤原地改写）：
+
+```ts
+const res = getResourceManager();
+// copy：多实例共享同一材质，setTheme 换肤联动 —— 适合「同款组件统一换肤」
+res.copy('example', (mat) => { mesh.material = mat; });
+// clone：各实例独立材质，改色不串 —— 适合「同款组件各自配色」
+res.clone('example', (mat) => { mesh.material = mat; });
+// clone + 独立贴图：连贴图也独立，可各自改 repeat / offset / colorSpace
+res.clone('example', (mat) => { mesh.material = mat; }, false);
+```
+
+引用不变：copy / clone 返回的材质在换肤时都被 MaterialManager 原地改写，`mesh.material = mat` 赋一次即可。
+
+模型克隆粒度（`cloneModel` 的 `clone` 选项，透传 `AssetCache.cloneModel`）：
+
+```ts
+// 默认全共享（几何 / 材质 / 贴图，最省内存）
+res.cloneModel('asset:example');
+// 独立材质（改色不影响其他实例）
+res.cloneModel('asset:example', { clone: { shareMaterial: false } });
+// 全独立（几何 / 材质 / 贴图都独立，可独立变形）
+res.cloneModel('asset:example', { clone: { shareGeometry: false, shareMaterial: false, shareTexture: false } });
+```
+
+> [exampleHandler](../src/3d/managers/component/handlers/exampleField/example.ts) 在调用处注释了这两个选择点，默认 copy + 全共享，按需切换。
 
 ---
 
@@ -857,7 +898,7 @@ handle.update({
 |------|------|
 | **就地补丁** | 已有物体只更新变化的部分，保留 Object3D 身份，不重建不闪烁 |
 | **卡片同步** | 增删物体后，受影响的卡片自动更新 |
-| **handler 分派** | 该 kind 有 handler.update 且返回 true 走 handler（如 rack 重建搁板） |
+| **handler 分派** | 该 kind 有 handler.update 且返回 true 走 handler（如组件有结构参数需重建子节点） |
 | **乱序支持** | upsert 数组中子可以先于父出现，引擎第二遍统一挂父 |
 
 ---
@@ -870,7 +911,7 @@ handle.update({
 
 ### 11.2 使用方式
 
-在 JSON 中通过 `component.name` 引用：
+在 JSON 中通过 `component.type` 引用：
 
 ```json
 {
@@ -878,19 +919,19 @@ handle.update({
   "type": "component",
   "parentId": "centralZone",
   "component": {
-    "name": "HeatMesh",
-    "options": { "width": 10, "height": 10, "segments": 50 }
+    "type": "HeatMesh",
+    "params": { "width": 10, "height": 10, "segments": 50 }
   },
   "position": [0, 0.1, 0],
   "rotation": [-90, 0, 0]
 }
 ```
 
-`component.name` 在创建 kind 链中优先级最高：`libraryHandler` 调 `createComponentObject(name, options)`（= `new Ctor(options)`），再补 name + transform + shadow。
+`component.type` 在创建 kind 链中优先级最高（命中 library-bridge）：`libraryHandler` 调 `createComponentObject(type, params)`（= `new Ctor(params)`），再补 name + transform + shadow。
 
 ### 11.3 自动注册
 
-[components/library-bridge.ts](../src/3d/components/library-bridge.ts) 的 `initLibraryBridge()` 通过 `registerNamespace()` 扫描 `@cyc/3d-components/core`、`/heat`、`/material` 三个命名空间里所有 **首字母大写的 Object3D 子类**，自动建立 name→Ctor 映射。**新增 3d-components 组件无需改本工程**——只要它是 Object3D 子类且首字母大写，就会被自动注册。
+[components/library-bridge.ts](../src/3d/components/library-bridge.ts) 的 `initLibraryBridge()` 通过 `registerNamespace()` 扫描 `@cyc/3d-components/core`、`/heat`、`/material` 三个命名空间里所有 **首字母大写的 Object3D 子类**，自动建立 type→Ctor 映射。**新增 3d-components 组件无需改本工程**——只要它是 Object3D 子类且首字母大写，就会被自动注册。
 
 > Material 子类（ShinyMaterial/MeshReflectorMaterial）不是 Object3D，暂不处理。
 
@@ -1030,25 +1071,25 @@ onUnmounted(() => poller.stop())
 | 对象 | 约定 | 示例 |
 |------|------|------|
 | JSON 物体 id | camelCase，语义化 | `chubGround`, `sbdTree1Group` |
-| 组件类 | PascalCase，`XxxComponent` | `RackComponent`, `ConveyorComponent` |
-| Handler | camelCase，`xxxHandler` | `rackHandler`, `conveyorHandler` |
-| kind 链 key | camelCase | `library`, `rack`, `model`, `primitive`, `group` |
-| `component.type` | camelCase | `rack`, `conveyor` |
-| `component.name` | PascalCase（3d-components 类名） | `HeatMesh`, `Grid`, `Wall` |
+| 组件类 | PascalCase，`XxxComponent` | `ExampleComponent`, `ConveyorComponent` |
+| Handler | camelCase，`xxxHandler` | `exampleHandler`, `conveyorHandler` |
+| kind 链 key | camelCase | `library`, `example`, `model`, `primitive`, `group` |
+| `component.type`（本仓组件） | camelCase | `example`, `conveyor` |
+| `component.type`（库组件） | PascalCase（3d-components 类名） | `HeatMesh`, `Grid`, `Wall` |
 | Card type | camelCase | `tree`, `building` |
-| 子 mesh name | 短语义名 | `postBL`, `shelf0`, `belt` |
-| 子节点 userData.id | `${parentId}_${child.name}` | `rack01_postBL` |
+| 子 mesh name | 短语义名 | `body`, `belt` |
+| 子节点 userData.id | `${parentId}_${child.name}` | `example01_<meshName>` |
 
 ### 15.2 创建 kind 链优先级
 
 ```
-library (component.name, 3d-components)  >  rack (component.type==='rack')
+library (component.type 命中 library-bridge)  >  example (component.type==='example')
   >  model (src)  >  primitive (geometry / mesh)  >  group
 ```
 
 写 JSON 时注意：
-- `component.name` 命中 library-bridge（`hasComponent` 为 true）→ 走 3d-components
-- `component.name` 未命中 → 回落到 `component.type` 链（当前只有 `rack` 一种内置垂域）
+- `component.type` 命中 library-bridge（`hasComponent` 为 true，库组件名 PascalCase）→ 走 3d-components
+- `component.type` 未命中库 → 回落查垂域 type 链（当前只有 `example` 一种内置垂域）
 - `component.type` 也未命中 → 回落到 `src` 走模型加载
 - `src` 也没有 → 回落到 `geometry` 走原生 mesh
 - 都没有且 `type:'group'` → 空 Group
@@ -1059,7 +1100,7 @@ library (component.name, 3d-components)  >  rack (component.type==='rack')
 |----------|-------------|
 | 新垂域组件 | `components/xxx/newComponent.ts`（组件类）+ `components/xxx/index.ts` 导出 + `handlers/xxx/newHandler.ts` + `handlers/index.ts` 加链项 |
 | 新 Handler（已有组件类加业务逻辑） | `handlers/xxx/newHandler.ts` + `handlers/index.ts` 加链项 |
-| 新模型资产 | `src/3d/models/xxx.glb` + `models/registry.ts` 注册 |
+| 新模型资产 | `src/3d/assets/models/xxx.glb` + `models/registry.ts` 注册 |
 | 新卡片组件 | `src/components/cards/XxxCard.vue` + `adapters/vue/sceneCardRules.ts` 加 `CardScanRule` |
 | 新场景预设 | `registerScenePreset('key', { ... })` 调用（无需改源码） |
 | 新 3d-components 组件 | `@cyc/3d-components` 包内开发，自动注册，无需改本工程 |
@@ -1067,7 +1108,7 @@ library (component.name, 3d-components)  >  rack (component.type==='rack')
 
 ### 15.4 性能注意
 
-- 几何体务必走 `assetPool.getGeometry(key, factory)`，材质走 `createLiveMaterial`，同参数不重复创建
+- 几何体务必走 `assetPool.getGeometry(key, factory)`，同参数不重复创建；模式A 材质走 `ResourceManager.createMaterialFromLive`（贴图经 AssetCache 去重），换肤材质走模式B `copy`/`clone`
 - 外部模型走原型缓存 + clone，同一 URL 只 parse 一次
 - `IUpdatable` 组件的 `update(delta)` 应避免每帧 GC，复用对象
 - 大场景中避免 `scene.traverse()` 热路径，用 `ObjectIndex`（id → Object3D Map，O(1) 查找）

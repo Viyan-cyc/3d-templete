@@ -3,7 +3,7 @@
  *  picker.ts — 编辑态场景拾取器（ScenePicker）
  *
  *  纯 Three.js，不感知 postMessage。由 createScene3D 在 interactive:true
- *  时构造，embed.vue 设 onPick 回调把命中信息 postMessage 给宿主。
+ *  时构造，Embed.vue 设 onPick 回调把命中信息 postMessage 给宿主。
  *
  *  职责：
  *  - enable/disable：仅在编辑态挂 pointerdown/pointerup 监听（与 OrbitControls 共存）。
@@ -61,7 +61,7 @@ export class ScenePicker {
    */
   private granularity: 'part' | 'whole' = 'part';
 
-  /** 拾取回调（embed.vue 设：把 PickInfo postMessage 给宿主） */
+  /** 拾取回调（Embed.vue 设：把 PickInfo postMessage 给宿主） */
   onPick: ((info: PickInfo) => void) | null = null;
 
   private scene: THREE.Scene;

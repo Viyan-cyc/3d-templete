@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { ComponentOptions } from './types';
-import { createLiveMaterial } from './material';
+import { getResourceManager } from '../../resources';
 import { applyTransform, applyShadow } from './transform';
 
 /**
@@ -10,7 +10,7 @@ import { applyTransform, applyShadow } from './transform';
  */
 export class PrimitiveComponent extends THREE.Mesh {
   constructor(opts: ComponentOptions, geo: THREE.BufferGeometry) {
-    super(geo, createLiveMaterial(opts.material));
+    super(geo, getResourceManager().createMaterialFromLive(opts.material));
     if (opts.id) {
       this.name = opts.id;
     }

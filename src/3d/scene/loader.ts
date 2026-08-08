@@ -69,7 +69,7 @@ export interface LiveDataObject {
   component?: LiveDataComponent
 
   // 模型资源引用（type==='glb'/'model'，或 resolver 链中 component 未命中时回落用）。
-  //  - 'asset:windmill' → 本地 modelRegistry（Vite ?url）+ GLTFLoader
+  //  - 'asset:example' → 本地 modelRegistry（Vite ?url）+ GLTFLoader
   //  - 'http(s)://...' → 远程 + 按扩展名选 loader
   //  - 'hunyuan:风力发电机' → 混元单次生成缓存（占位 throw，回落 mesh）
   //
@@ -85,14 +85,16 @@ export interface LiveDataObject {
 
 export interface LiveDataComponent {
 
-  /** 内置 builder 组件类型名（如 rack），走对应垂域 handler（如 rackHandler）。library 组件用 name，可省略 */
+  /**
+   * 组件标识，统一用 type：
+   *  - 库组件：3d-components 类名（Grid/Wall/HeatMesh…），libraryBridge 注册则走 libraryHandler（优先级最高）
+   *  - 本仓组件：builder type（example 等），走对应垂域 handler（exampleHandler…）
+   *  creationChain 按优先级匹配，命中库注册表走库，否则查 type 链
+   */
   type?: string
 
   /** 组件参数（library 组件时透传给库构造器当 options；builder 时给 handler）。统一用 params，支持复杂结构（path/walls 等） */
   params?: Record<string, unknown>
-
-  /** 3d-components 组件类名（Grid/Wall/HeatMesh 等），resolver 链最高优先级，走 library-bridge */
-  name?: string
 }
 
 export interface LiveDataGeometry {

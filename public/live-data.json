@@ -89,6 +89,16 @@
       ]
     },
     {
+      "id": "example1",
+      "type": "component",
+      "parentId": "sceneRoot",
+      "component": { "type": "example" },
+      "position": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    {
       "id": "centralHubZone",
       "type": "group",
       "parentId": "sceneRoot",

@@ -9,7 +9,6 @@ export type { ComponentOptions } from './types';
 export { PrimitiveComponent } from './Primitive';
 export { TextComponent } from './Text';
 export { ModelComponent } from './Model';
-export { createLiveMaterial } from './material';
 export { createGeometry } from './geometry';
 export { applyTransform, applyShadow, parseVec3 } from './transform';
 export { assetPool } from './assets';

@@ -25,12 +25,12 @@
     },
     {
       "id": "grid-1", "type": "component", "parentId": null,
-      "component": { "type": "", "name": "Grid", "params": { "size": 10, "division": 10 } },
+      "component": { "type": "Grid", "params": { "size": 10, "division": 10 } },
       "position": [0, 0.01, 0]
     },
     {
-      "id": "windmill-1", "type": "model", "parentId": null,
-      "src": "asset:windmill",
+      "id": "example-1", "type": "model", "parentId": null,
+      "src": "asset:example",
       "position": [3, 0, 0], "scale": [1,1,1], "castShadow": true
     },
     {

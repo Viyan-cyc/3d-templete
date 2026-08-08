@@ -13,7 +13,7 @@ import type { LiveDataObject } from '../loader';
 
 /**
  * normalizer 产出的渲染投影 + 原数据保留。
- * - source：原始 data 引用，业务侧 data.racks.length 等照用（投影不替换）
+ * - source：原始 data 引用，业务侧 data.example.length 等照用（投影不替换）
  * - objects：渲染视图，喂 buildObjects（按 id 的活索引由 createScene3D 派生为 sharedState.dataMap）
  */
 export interface SceneModel {
@@ -47,12 +47,12 @@ export type TypeMapping =
   | { kind: 'group' }
 
   /**
-   * 组件 → type='component'。适配层按 name 自动判断走哪个 handler：
-   *   - name 在 library-bridge 注册（库组件 Grid/Wall/...）→ component:{name, params}（libraryHandler 把 params 当 options 传库）
-   *   - 否则（应用内置 builder 如 rack）→ component:{type: name, params}（rackHandler 等）
-   * 开发者只配 name + params（参数提取函数），不用区分 library/component。统一用 params。
+   * 组件 → type='component'。统一产 component:{type, params}，路由由 creationChain 定：
+   *   - type 在 libraryBridge 注册（库组件 Grid/Wall/...）→ libraryHandler（params 当 options 传库）
+   *   - 否则（应用内置 builder 如 example）→ 对应垂域 handler（exampleHandler 等）
+   * 开发者只配 type + params（参数提取函数），不用区分 library/builder。
    */
-  | { kind: 'component'; name: string; params?: (node: EntityNode) => Record<string, unknown> }
+  | { kind: 'component'; type: string; params?: (node: EntityNode) => Record<string, unknown> }
 
   /** 模型资源 → type='model', src（asset:/http:/hunyuan:） */
   | { kind: 'src'; src: (node: EntityNode) => string }

@@ -40,6 +40,7 @@ import {
 import { ScenePicker } from './interaction/picker';
 import { registerComponentHandlers, disposeComponentHandlers } from './managers';
 import { sharedState } from './managers/component/handlers/base/shared';
+import { registerModels, registerMaterials, getResourceManager } from './resources';
 
 export interface Scene3DControlsOptions {
   minDistance?: number
@@ -74,7 +75,7 @@ export interface Scene3DOptions {
   /**
    * 是否为交互预览态（供 octoapp iframe 嵌入）：
    * - false（默认，生产/交付）：不挂 postMessage 桥、不挂 ScenePicker
-   * - true（预览/编辑）：由 embed.vue 调用方设 true，桥与 picker 在 embed 侧挂载
+   * - true（预览/编辑）：由 Embed.vue 调用方设 true，桥与 picker 在 embed 侧挂载
    */
   interactive?: boolean
 
@@ -123,7 +124,7 @@ export interface Scene3DHandle {
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
   setDebug(mode: boolean): void
 
-  /** 编辑态拾取器（仅 interactive:true 时存在；embed.vue 设 onPick 回传 SCENE_PICK） */
+  /** 编辑态拾取器（仅 interactive:true 时存在；Embed.vue 设 onPick 回传 SCENE_PICK） */
   picker?: ScenePicker
 
   /** 聚焦到某物体（仅 interactive:true；SCENE_FLY_TO 用） */
@@ -332,9 +333,12 @@ export const createScene3D = async (
   // URL 参数优先于 options.debug
   const debug = readDebugFromURL() || options.debug || false;
 
-  // 0. 注册业务 handler + 数据 adapter（幂等：重复调用不会重复注册，只是覆盖）
+  // 0. 注册业务 handler + 数据 adapter + 资源（模型/材质注册表 + 全局 ResourceManager，幂等）
   registerComponentHandlers();
   registerAdapters();
+  registerModels();
+  registerMaterials();
+  sharedState.resources = getResourceManager();
 
   // 1. 3D 引擎
   const app = new App3D({

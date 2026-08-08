@@ -10,7 +10,7 @@ const routes: RouteRecordRaw[] = [
     // 预览/编辑入口：供 octoapp iframe 嵌入，走 postMessage 桥
     path: '/embed',
     name: 'Embed',
-    component: () => import('@/views/embed.vue'),
+    component: () => import('@/views/Embed.vue'),
   },
 ];
 

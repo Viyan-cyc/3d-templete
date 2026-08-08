@@ -250,18 +250,12 @@ onUnmounted(() => {
 
 ```jsonc
 {
-  "id": "rack01",
+  "id": "example01",
   "type": "component",
-  "parentId": "warehouseZone",
+  "parentId": "exampleZone",
   "position": [2, 0, 5],
   "component": {
-    "type": "rack",                    // 已注册的组件类型名称
-    "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 }
-  },
-  "material": {
-    "type": "standard",
-    "color": "#888888",
-    "metalness": 0.6
+    "type": "example"                  // 已注册的组件类型名称（自加载 example.glb + example.jpg）
   }
 }
 ```
@@ -297,9 +291,9 @@ onUnmounted(() => {
 
 | 类别 | 组件 type | 说明 | params |
 |------|----------|------|--------|
-| 仓储 | `rack` | 货架 | `levels`, `width`, `height`, `depth` |
+| 示例 | `example` | 示例组件（自加载模型 + 贴图） | 无 |
 
-> 当前仅 `rack` 有实现，其余组件待补充。
+> 当前仅 `example` 有实现，其余组件待补充。
 
 ---
 
@@ -416,7 +410,7 @@ interface CardScanRule {
    * 示例：
    *   /^(tree\d+)_/       → tree01_trunk, tree01_canopy → 分组 id = tree01
    *   /^(building[A-Z])_/ → buildingA_body              → 分组 id = buildingA
-   *   /^(rack\d+)/        → rack01                      → 分组 id = rack01
+   *   /^(example\d+)/    → example01                   → 分组 id = example01
    */
   pattern: RegExp
 
@@ -467,7 +461,7 @@ cardRules 中的 pattern:    /^(tree\d+)_/
 | 场景 | id 命名示例 | pattern |
 |------|------------|---------|
 | 设备 | `device01_body`, `device01_screen` | `/^(device\d+)_/` |
-| 货架 | `rack01`, `rack02` | `/^(rack\d+)/` |
+| 示例 | `example01`, `example02` | `/^(example\d+)/` |
 | 建筑 | `buildingA_body`, `buildingA_roof` |A_roof` | `/^(building[A-Z])_/` |
 | AGV | `agv01`, `agv02` | `/^(agv\d+)$/` |
 

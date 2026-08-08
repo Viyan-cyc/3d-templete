@@ -323,43 +323,27 @@ onUnmounted(() => {
 
 ### 4.3 component — 内置垂域组件
 
-预置的复合组件，通过 `component.type` 指定。当前内置 `rack`（货架）：
+预置的复合组件，通过 `component.type` 指定。当前内置 `example`（示例组件，自加载 example.glb + example.jpg 贴图）：
 
 ```jsonc
 {
-  "id": "rack01",
+  "id": "example01",
   "type": "component",
-  "parentId": "warehouseZone",
+  "parentId": "exampleZone",
   "component": {
-    "type": "rack",
-    "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 }
-  },
-  "material": {
-    "type": "standard",
-    "color": "#888888",
-    "roughness": 0.5,
-    "metalness": 0.3
+    "type": "example"
   },
   "position": [10, 0, 5]
 }
 ```
 
-**`rack` 参数**：
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `levels` | 4 | 搁板层数（夹在 2~20） |
-| `width` | 2 | 货架宽度 |
-| `height` | 2 | 货架高度 |
-| `depth` | 0.6 | 货架深度 |
-
-> 货架会程序化生成 4 根立柱 + N 层搁板，子节点带 name（`postBL`/`postBR`/`postTL`/`postTR`/`shelf0`...）。运行时改 `levels` 会就地重建搁板（不重建整个物体）。
+> `example` 组件无结构参数：构造时自动加载已注册的 `example.glb`（`src='asset:example'`）并贴上 `example.jpg` 贴图，资源经全局 ResourceManager 去重缓存、多实例复用。运行时改 transform/material 走默认 patchObject 即可。
 >
 > 需要其他垂域组件（传送带、机械臂等）？这些是 3D 开发者按需扩展的，详见 [开发文档 §4](./DEVELOPMENT_GUIDE.md#4-添加新组件component--handler)。
 
 ### 4.4 component (3d-components) — 高级组件
 
-引用 `@cyc/3d-components` 组件库中的组件，通过 `component.name` 指定。支持 Grid、Wall、HeatMesh、Sky 等。
+引用 `@cyc/3d-components` 组件库中的组件，通过 `component.type` 指定（库组件名 PascalCase）。支持 Grid、Wall、HeatMesh、Sky 等。
 
 ```jsonc
 {
@@ -367,15 +351,15 @@ onUnmounted(() => {
   "type": "component",
   "parentId": "centralZone",
   "component": {
-    "name": "HeatMesh",
-    "options": { "width": 10, "height": 10, "segments": 50 }
+    "type": "HeatMesh",
+    "params": { "width": 10, "height": 10, "segments": 50 }
   },
   "position": [0, 0.1, 0],
   "rotation": [-90, 0, 0]
 }
 ```
 
-> **`name` vs `type`**：`name` 引用 3d-components 库组件（优先级最高），`type` 引用内置垂域组件（如 `rack`）。`name` 命中时走库组件；未命中时回落到 `type`。
+> **`type` 统一标识**：库组件名（PascalCase，如 `HeatMesh`/`Grid`）命中 library-bridge 走库；本仓组件 type（camelCase，如 `example`）走垂域 handler。creationChain 按优先级匹配。
 
 ### 4.5 glb/model — 外部模型
 
@@ -384,10 +368,10 @@ onUnmounted(() => {
 ```jsonc
 // 引用本地注册的模型
 {
-  "id": "windmill01",
+  "id": "example01",
   "type": "glb",
   "parentId": "farmZone",
-  "src": "asset:windmill",
+  "src": "asset:example",
   "position": [10, 0, 5],
   "castShadow": true
 }
@@ -406,7 +390,7 @@ onUnmounted(() => {
 
 | 前缀 | 示例 | 说明 |
 |------|------|------|
-| `asset:xxx` | `asset:windmill` | 本地注册模型（需 3D 开发者在 modelRegistry 中注册） |
+| `asset:xxx` | `asset:example` | 本地注册模型（需 3D 开发者在 modelRegistry 中注册） |
 | `https://...` | `https://cdn.example.com/car.glb` | 远程 URL |
 | `hunyuan:xxx` | `hunyuan:风力发电机` | AI 生成模型（暂未接入，会回落红色方块兜底） |
 
@@ -717,7 +701,7 @@ handle.update({
 |------|------|
 | **就地补丁** | 已有物体只更新变化的部分，不会重建，不闪烁 |
 | **卡片同步** | 增删物体后，受影响的卡片自动更新 |
-| **handler 分派** | 如果物体类型注册了 handler（如 rack），更新走 handler 逻辑（如改层数重建搁板） |
+| **handler 分派** | 如果物体类型注册了 handler，更新走 handler 逻辑（如组件有结构参数需重建子节点） |
 | **乱序支持** | upsert 数组中子可以先于父出现，引擎会正确处理挂载顺序 |
 
 ### 7.5 定时更新（LiveDataPoller）
@@ -887,16 +871,15 @@ window.addEventListener('message', (event) => {
 }
 ```
 
-### 9.2 仓储场景 + 货架卡片
+### 9.2 示例场景 + 示例组件卡片
 
 ```jsonc
-// JSON 中的物体（注意 id 用 _ 连接，方便卡片 pattern 匹配）
+// JSON 中的物体
 {
-  "id": "rack01_base",
+  "id": "example01",
   "type": "component",
-  "parentId": "warehouseZone",
-  "component": { "type": "rack", "params": { "levels": 5, "width": 2, "height": 2, "depth": 0.6 } },
-  "material": { "type": "standard", "color": "#888888", "roughness": 0.5, "metalness": 0.3 },
+  "parentId": "exampleZone",
+  "component": { "type": "example" },
   "position": [5, 0, 3]
 }
 ```
@@ -905,16 +888,16 @@ window.addEventListener('message', (event) => {
 // 卡片规则
 const cardRules: CardScanRule<Component>[] = [
   {
-    type: 'rack',
-    component: RackCard,
-    pattern: /^(rack\d+)_/,          // 匹配 rack01_base, rack02_base 等
+    type: 'example',
+    component: ExampleCard,
+    pattern: /^(example\d+)/,        // 匹配 example01、example02 等
     anchor: 'highest',
     offset: [0, 1, 0],
     interactiveGroup: 'scene',
     props: (group) => ({
-      rackId: group.id,
-      utilization: 0.78,             // 从业务 API 查到的利用率
-      itemCount: 156,
+      exampleId: group.id,
+      status: 'running',             // 从业务 API 查到的状态
+      value: 42,
     }),
   },
 ]

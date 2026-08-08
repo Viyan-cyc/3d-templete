@@ -1,8 +1,8 @@
 /**
  * libraryHandler — 实例化 3d-components 组件（Wall/Grid/HeatMesh…）
  *
- * 通过 library-bridge 的 createComponentObject(name, options)（= new Ctor(options）），
- * 再补 name + transform + shadow。原 createLiveObject3D 的 component.name 分支迁此。
+ * 通过 libraryBridge 的 createComponentObject(type, options)（= new Ctor(options）），
+ * 再补 name + transform + shadow。原 createLiveObject3D 的 component 分支迁此（统一走 type）。
  */
 import type { ComponentHandler } from '../../ComponentManager';
 import type { LiveDataObject } from '../../../../scene/loader';
@@ -12,11 +12,11 @@ import { toOptions } from './options';
 
 export const libraryHandler: ComponentHandler = {
   create(data: LiveDataObject) {
-    const name = data.component?.name;
-    if (!name) {
+    const type = data.component?.type;
+    if (!type) {
       return null;
     }
-    const obj = createComponentObject(name, data.component?.params ?? {});
+    const obj = createComponentObject(type, data.component?.params ?? {});
     if (!obj) {
       return null;
     }

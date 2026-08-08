@@ -55,7 +55,7 @@
           { "id": "primTorus", "type": "mesh", "position": [-4, 1.4, 3], "rotation": [90, 0, 135] },
           { "id": "grpChildBox", "type": "mesh", "position": [0, 0.5, 0], "scale": [1, 1, 1] },
           { "id": "primText", "type": "mesh", "position": [0, 4, -1] },
-          { "id": "rack1", "type": "component", "component": { "type": "rack", "params": { "levels": 5, "width": 2.4, "height": 2.4, "depth": 0.8 } } }
+          { "id": "example1", "type": "component", "component": { "type": "example" } }
         ],
         "remove": ["primAlert"]
       }

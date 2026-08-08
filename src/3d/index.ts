@@ -73,13 +73,9 @@ export {
   hasComponent, resolveComponent, createComponentObject, initLibraryBridge,
 } from './components';
 
-// ---- 模型资产 + 加载 + 混元生成 ----
-export { modelRegistry, resolveModelSrc } from './models/registry';
-export {
-  loadModel, assetProvider, httpProvider, providers as modelProviders, disposeModelCache,
-} from './models/loader';
-export type { ModelProvider, LoadOpts } from './models/loader';
-export { hunyuanProvider, normalizeKey } from './models/hunyuan';
+// ---- 资源门面（模型 + 材质，统一 AssetCache / MaterialManager）----
+export { getResourceManager, registerModels, registerMaterials } from './resources';
+export type { ResourceManager, CloneModelOpts, HunyuanGenerator } from './resources';
 
 // ---- 编辑态拾取（interactive 模式，阶段3 起）----
 export { ScenePicker } from './interaction/picker';
@@ -91,7 +87,6 @@ export { AssetPool } from './components';
 // ---- 基础设施 ----
 export { App3D } from './App3D';
 export { DebugOverlay } from './debug';
-export { AssetLoader, getAssetLoader } from './loaders/AssetLoader';
 export type { App3DOptions } from './App3D';
 export type { DebugOverlayOptions } from './debug';
 export type { SceneConfig } from './App3D';

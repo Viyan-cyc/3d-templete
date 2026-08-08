@@ -6,7 +6,7 @@
  *
  * typeRegistry 配置覆盖：注册的 typeKey 按 TypeMapping 转（component/src/skip）；
  *   未注册的回落 skip（不产出，透明递归子）；注册 skip 同样透明。
- * component kind 按 name 自动判断：库组件（hasComponent）→ component.name，否则 component.type。
+ * component kind 统一产 component.type；路由由 creationChain 定（库组件 type 命中 libraryBridge → libraryHandler，否则走垂域 handler）。
  *
  * 通用提取 position/rotation/scale 到 LiveDataObject 顶层（复用 applyTransform）；
  * 其余参数由 typeRegistry 的 options 函数按需提取到 component.options/params。
@@ -17,7 +17,6 @@ import type { Adapter, EntityNode, TypeMapping } from './types';
 import type { LiveDataObject, LiveDataComponent } from '../loader';
 import { toVec, isEntityNode } from './utils';
 import { resolveTypeMapping } from './registry';
-import { hasComponent } from '../../components';
 
 /** 按 TypeMapping 构造 LiveDataObject（position/rotation/scale 通用提取到顶层） */
 const buildObject = (
@@ -41,11 +40,9 @@ const buildObject = (
       };
     case 'component': {
       const params = mapping.params ? mapping.params(node) : {};
-      // name 在 library-bridge 注册 → 库组件（component.name，libraryHandler 把 params 当 options 传库）；
-      // 否则 → 内置 builder（component.type，走 rackHandler 等）。统一用 params
-      const component: LiveDataComponent = hasComponent(mapping.name)
-        ? { name: mapping.name, params }
-        : { type: mapping.name, params };
+      // 统一产 component.type：库组件 type（Grid/Wall…）命中 libraryBridge 走 libraryHandler，
+      // 本仓 builder type（example…）走垂域 handler。路由由 creationChain 定，归一化层不判断
+      const component: LiveDataComponent = { type: mapping.type, params };
       return {
         id, type: 'component', parentId, component, ...transform,
       };

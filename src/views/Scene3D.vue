@@ -28,7 +28,7 @@ import {
 } from '@/3d'
 import { CardHost } from '@/adapters/vue'
 import { cardRules } from '@/adapters/vue/sceneCardRules'
-import { LiveDataPoller } from '@/adapters/live-data'
+import { LiveDataPoller } from '@/adapters/liveData'
 
 // ---- 状态 ----
 const canvasRef = ref<HTMLCanvasElement | null>(null)
