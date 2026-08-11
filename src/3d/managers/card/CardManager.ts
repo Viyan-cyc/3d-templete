@@ -1,8 +1,9 @@
-import * as THREE from 'three';
-import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js';
+import type * as THREE from 'three';
+import type { IntersectionEvent, InteractiveManager } from '@cyc/3d-components/interactive';
 import { CardComponentRegistry, cardComponentRegistry } from './CardRegistry';
+import { Css2dCard } from '../../components/base';
 import type {
-  CardDef, CardState, CardStateCallback, CardManagerOptions, CardScanRule, CardScanGroup, CardAnchorSpec,
+  CardDef, CardState, CardStateCallback, CardScanRule, CardScanGroup, CardAnchorSpec,
 } from './types';
 
 // ---- 锚点选取 ----
@@ -33,23 +34,33 @@ interface CardEntry {
   /** 参与射线检测的全部关联物体（一棵树/一栋楼的所有零件） */
   targets: THREE.Object3D[]
   def: CardDef
-  css2d: CSS2DObject
+  css2d: THREE.Object3D
   domEl: HTMLElement
   visible: boolean
 }
+
+/** 场景订阅标识（用于 InteractiveManager 多订阅者 add/remove） */
+const CARD_SCENE_ID = 'card-scene';
 
 /**
  * ============================================================
  *  CardManager — CSS2D 卡片管理器（框架无关）
  *
  *  职责：
- *  - 为绑定了 CardDef 的 3D 物体创建 CSS2DObject（DOM 定位层）
+ *  - 为绑定了 CardDef 的 3D 物体创建 CSS2DObject（DOM 定位层，经 Css2dCard）
  *  - 管理卡片的显示/隐藏（单个、按类型、全部）
  *  - 处理 click 交互模式（同组互斥显示）
  *  - 暴露 CardState[] 供 UI 层渲染卡片内容
  *  - scanAndRegisterCards / refreshCards 实例方法
  *  - 场景切换时整体隐藏/恢复
  *  - 销毁时清理 DOM
+ *
+ *  交互底座：不自建 Raycaster / 不自挂 canvas 监听。点击检测交由单实例
+ *  InteractiveManager —— 在 scene 上注册一个 'card-scene' 订阅（onClick +
+ *  onPointerMissed），onClick 时取最近命中沿父链找卡片（与原 _handleClick
+ *  完全一致：只看 intersects[0]，链上无卡片则不动作）。编辑态（editMode）
+ *  下 onClick 直接返回，只显示 always 卡片、不触发 click-toggle，避免与
+ *  SelectionService 冲突。
  *
  *  每个实例有自己的 registry（CardComponentRegistry<T>），
  *  多实例互不干扰。单实例可用 CardManager.defaultRegistry。
@@ -62,65 +73,51 @@ export class CardManager<T = unknown> {
   /** 全局共享注册表（向后兼容 + 单实例场景） */
   static readonly defaultRegistry: CardComponentRegistry<unknown> = cardComponentRegistry;
 
-  readonly css2DRenderer: CSS2DRenderer;
   private _cards: Map<string, CardEntry> = new Map();
   private _stateListeners: Array<CardStateCallback> = [];
-  private _raycaster: THREE.Raycaster = new THREE.Raycaster();
-  private _mouse: THREE.Vector2 = new THREE.Vector2();
-  private _camera: THREE.Camera;
-  private _domElement: HTMLElement;
-  private _clickThreshold: number;
-  private _clickHandler: ((e: MouseEvent) => void) | null = null;
-  private _pointerDownHandler: ((e: PointerEvent) => void) | null = null;
-  private _pointerDownPos: { x: number; y: number } | null = null;
   private _frozen: boolean = false;
 
-  constructor(options: CardManagerOptions) {
+  /** 交互底座绑定（bindInteraction 后可用；未绑定则无点击响应，仅常显卡片） */
+  private _manager: InteractiveManager | null = null;
+  private _scene: THREE.Scene | null = null;
+  private _editMode: boolean = false;
+  private _sceneBound: boolean = false;
+
+  /** per-click 标志：scene 的 onClick 会对每个命中触发 N 次，用它保证一次点击只处理首次 */
+  private _clickResolved: boolean = false;
+
+  constructor() {
     this.registry = new CardComponentRegistry<T>();
+  }
 
-    const {
-      container, camera, canvas, clickThreshold = 5,
-    } = options;
-    this._camera = camera;
-    this._domElement = canvas;
-    this._clickThreshold = clickThreshold;
-
-    // CSS2D renderer
-    this.css2DRenderer = new CSS2DRenderer();
-    this.css2DRenderer.domElement.style.position = 'absolute';
-    this.css2DRenderer.domElement.style.top = '0';
-    this.css2DRenderer.domElement.style.left = '0';
-    // 让点击穿透到 canvas
-    this.css2DRenderer.domElement.style.pointerEvents = 'none';
-
-    // CSS2D 层覆盖在 canvas 上方
-    this.css2DRenderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(this.css2DRenderer.domElement);
-
-    // 点击交互监听
-    // pointerdown 记录起点，click 时判断位移，避免 OrbitControls 拖动旋转松手时误触
-    this._pointerDownHandler = (e: PointerEvent) => {
-      this._pointerDownPos = { x: e.clientX, y: e.clientY };
-    };
-    this._clickHandler = (e: MouseEvent) => {
-      if (this._frozen) {
-        return;
-      }
-      if (this._pointerDownPos) {
-        const dx = e.clientX - this._pointerDownPos.x;
-        const dy = e.clientY - this._pointerDownPos.y;
-        // 视为拖动，忽略
-        if (Math.hypot(dx, dy) > this._clickThreshold) {
+  /**
+   * 绑定交互底座：在 scene 上注册 'card-scene' 订阅（onClick + onPointerMissed）。
+   *
+   * @param editMode 编辑态（interactive:true）下为 true：onClick 直接返回，
+   *   只显示 always 卡片、不触发 click-toggle，避免与 SelectionService 冲突。
+   *   运行态为 false：点物体弹/收卡片、点空白 hideAll。
+   */
+  bindInteraction(manager: InteractiveManager, scene: THREE.Scene, editMode: boolean): void {
+    this._manager = manager;
+    this._scene = scene;
+    this._editMode = editMode;
+    manager.add(scene, {
+      // pointerdown 重置 per-click 标志（scene 是任意命中的祖先，必触发一次）
+      onPointerDown: () => {
+        this._clickResolved = false;
+      },
+      onClick: (e) => this._handleSceneClick(e),
+      onPointerMissed: (e) => {
+        // 冻结态（场景切换中）不响应；仅响应 click（pointerup）路径的 missed：
+        // _fireClickMissed 已按 clickThreshold 过滤拖拽；pointerdown 路径的 missed
+        // 不带阈值，跳过以免拖拽空白时误隐藏卡片。
+        if (this._frozen || e.nativeEvent.type === 'pointerdown') {
           return;
         }
-      }
-      const rect = canvas.getBoundingClientRect();
-      this._mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      this._mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      this._handleClick();
-    };
-    canvas.addEventListener('pointerdown', this._pointerDownHandler);
-    canvas.addEventListener('click', this._clickHandler);
+        this.hideAll();
+      },
+    }, CARD_SCENE_ID);
+    this._sceneBound = true;
   }
 
   /**
@@ -133,16 +130,16 @@ export class CardManager<T = unknown> {
     type: string,
     targets: THREE.Object3D | THREE.Object3D[],
     def: CardDef = {},
-  ): void {
+  ): HTMLElement | undefined {
     if (this._cards.has(id)) {
       console.warn(`[CardManager] 卡片 "${id}" 已存在`);
-      return;
+      return undefined;
     }
 
     const targetList = Array.isArray(targets) ? targets : [targets];
     if (targetList.length === 0) {
       console.warn(`[CardManager] 卡片 "${id}" 没有关联物体`);
-      return;
+      return undefined;
     }
     const anchor = def.anchor ?? targetList[0];
 
@@ -155,12 +152,9 @@ export class CardManager<T = unknown> {
     domEl.style.pointerEvents = 'auto';
     domEl.style.transition = 'opacity 0.3s ease';
 
-    const css2d = new CSS2DObject(domEl);
+    // CSS2D 锚点：Css2dCard 包装 domEl，add 到锚点物体（渲染由 createScene3D 的 CSS2DRenderer 统一处理）
+    const css2d = new Css2dCard(domEl, { offset: def.offset ?? [0, 1.5, 0] });
     css2d.name = `card-${id}`;
-    const off = def.offset ?? [0, 1.5, 0];
-    css2d.position.set(off[0] ?? 0, off[1] ?? 1.5, off[2] ?? 0);
-
-    // 挂到锚点上，跟随物体移动
     anchor.add(css2d);
 
     const alwaysVisible = def.mode === 'always' || def.alwaysVisible === true;
@@ -180,6 +174,7 @@ export class CardManager<T = unknown> {
 
     this._cards.set(id, entry);
     this._notify();
+    return domEl;
   }
 
   /** 移除卡片 */
@@ -390,74 +385,62 @@ export class CardManager<T = unknown> {
     this.scanAndRegisterCards(scene, rules);
   }
 
-  /** 每帧渲染（由 App3D 的 post-render 回调调用） */
-  render(scene: THREE.Scene, camera: THREE.Camera): void {
-    this.css2DRenderer.render(scene, camera);
-  }
-
-  /** resize */
-  resize(width: number, height: number): void {
-    this.css2DRenderer.setSize(width, height);
-  }
-
-  /** 销毁所有卡片 */
+  /** 销毁卡片 DOM + 注销场景订阅（CSS2DRenderer 由 createScene3D 自行销毁） */
   dispose(): void {
-    if (this._clickHandler) {
-      this._domElement.removeEventListener('click', this._clickHandler);
-    }
-    if (this._pointerDownHandler) {
-      this._domElement.removeEventListener('pointerdown', this._pointerDownHandler);
+    if (this._manager && this._scene && this._sceneBound) {
+      this._manager.remove(this._scene, CARD_SCENE_ID);
+      this._sceneBound = false;
     }
     this._cards.forEach((entry) => {
       entry.css2d.removeFromParent();
       entry.domEl.remove();
     });
     this._cards.clear();
-    this.css2DRenderer.domElement.remove();
     this._stateListeners = [];
   }
 
   // ---- 内部 ----
 
-  private _handleClick(): void {
-    if (!this._camera) {
+  /**
+   * scene 的 onClick 处理：取最近命中沿父链找卡片（搬自原 _handleClick）。
+   *
+   * manager 的 onClick 按命中数触发 N 次（stopPropagation 仅标记不中断，见
+   * interactive 源码），故用 _clickResolved 标志保证一次点击只处理首次；
+   * 首次回调的 e.intersections 按距离排序，只看 [0]（最近命中）的父链 ——
+   * 与原 _handleClick「intersects[0] 沿父链找 entry，找不到不动作」完全一致。
+   * 编辑态直接返回（只显 always 卡片，不 click-toggle）。
+   */
+  private _handleSceneClick(e: IntersectionEvent): void {
+    if (this._frozen || this._editMode || this._clickResolved) {
+      return;
+    }
+    this._clickResolved = true;
+
+    if (e.intersections.length === 0) {
       return;
     }
 
-    // 收集所有卡片关联的物体，建立 object → entry 反查表
+    // 构建 object → entry 反查表（per-click，与原 _handleClick 一致）
     const objToEntry = new Map<THREE.Object3D, CardEntry>();
-    const targets: THREE.Object3D[] = [];
     this._cards.forEach((entry) => {
       entry.targets.forEach((o) => {
         if (!objToEntry.has(o)) {
           objToEntry.set(o, entry);
-          targets.push(o);
         }
       });
     });
 
-    if (targets.length === 0) {
-      return;
-    }
-
-    this._raycaster.setFromCamera(this._mouse, this._camera);
-    const intersects = this._raycaster.intersectObjects(targets, true);
-
-    if (intersects.length > 0) {
-      // 沿父子链找到关联卡片的 entry（兼容嵌套物体）
-      let hit: THREE.Object3D | null = intersects[0].object;
-      while (hit) {
-        const entry = objToEntry.get(hit);
-        if (entry) {
-          this._onCardClicked(entry);
-          return;
-        }
-        hit = hit.parent;
+    // 最近命中沿父链找卡片（兼容嵌套物体）
+    let cur: THREE.Object3D | null = e.intersections[0].object;
+    while (cur) {
+      const entry = objToEntry.get(cur);
+      if (entry) {
+        this._onCardClicked(entry);
+        return;
       }
-    } else {
-      // 点空白：关闭所有 click 模式卡片
-      this.hideAll();
+      cur = cur.parent;
     }
+    // 链上无卡片（点中非卡片物体）→ 不动作（与原实现一致：不 hideAll、不 toggle）
   }
 
   private _onCardClicked(entry: CardEntry): void {

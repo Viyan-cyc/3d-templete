@@ -28,6 +28,7 @@ import {
 } from '@/3d'
 import { CardHost } from '@/adapters/vue'
 import { cardRules } from '@/adapters/vue/sceneCardRules'
+import ExampleCard from '@/components/cards/ExampleCard.vue'
 import { LiveDataPoller } from '@/adapters/liveData'
 
 // ---- 状态 ----
@@ -64,6 +65,8 @@ onMounted(async () => {
       },
     })
     cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
+    // 注册 example 卡片组件（handler 命令式 addCard 用 type='example'，CardHost 据此渲染）
+    handle.cardManager.registry.register('example', ExampleCard)
     handle.onCardState((states) => {
       cardStates.value = states
     })

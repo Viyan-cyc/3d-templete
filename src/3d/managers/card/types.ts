@@ -4,7 +4,7 @@
  * ============================================================
  */
 
-import type { Object3D, Camera } from 'three';
+import type { Object3D } from 'three';
 
 // ---- Card Definition (JSON 配置级) ----
 
@@ -70,29 +70,6 @@ export interface CardState {
 
 /** 卡片状态变化回调 */
 export type CardStateCallback = (cards: CardState[]) => void
-
-// ---- Card Manager Options ----
-
-/**
- * CardManager 构造选项
- */
-export interface CardManagerOptions {
-
-  /** CSS2D 层挂载容器 */
-  container: HTMLElement
-
-  /** 用于射线检测的相机 */
-  camera: Camera
-
-  /** 用于监听点击事件的 canvas */
-  canvas: HTMLCanvasElement
-
-  /**
-   * 拖拽与点击的像素距离阈值，超过则视为拖拽忽略点击。
-   * @default 5
-   */
-  clickThreshold?: number
-}
 
 // ---- Scan Rule Types ----
 

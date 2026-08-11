@@ -39,7 +39,7 @@ export type { CardDef, CardState } from './managers/card/types';
 // ---- 管理器 ----
 export { CardManager, CardComponentRegistry, cardComponentRegistry } from './managers/card';
 export type {
-  CardStateCallback, CardManagerOptions, CardScanRule, CardScanGroup, CardAnchorSpec,
+  CardStateCallback, CardScanRule, CardScanGroup, CardAnchorSpec,
 } from './managers/card/types';
 export { ComponentManager, componentManager, registerComponentHandlers } from './managers/component';
 export type { ComponentHandler, ComponentContext } from './managers/component';
@@ -77,9 +77,10 @@ export {
 export { getResourceManager, registerModels, registerMaterials } from './resources';
 export type { ResourceManager, CloneModelOpts, HunyuanGenerator } from './resources';
 
-// ---- 编辑态拾取（interactive 模式，阶段3 起）----
-export { ScenePicker } from './interaction/picker';
-export type { PickInfo } from './interaction/picker';
+// ---- 交互层（选择服务 + 相机操作，interactive 模式起）----
+export { SelectionService } from './interaction/SelectionService';
+export type { PickInfo, SelectionGranularity } from './interaction/SelectionService';
+export { CameraRig } from './interaction/CameraRig';
 
 // ---- 3D 组件：缓存 ----
 export { AssetPool } from './components';

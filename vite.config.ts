@@ -17,6 +17,7 @@ export default defineConfig({
       { find: '@cyc/3d-components/heat', replacement: resolve(__dirname, '../3d-components/src/heat/index.ts') },
       { find: '@cyc/3d-components/material', replacement: resolve(__dirname, '../3d-components/src/material/index.ts') },
       { find: '@cyc/3d-components/utils', replacement: resolve(__dirname, '../3d-components/src/utils/index.ts') },
+      { find: '@cyc/3d-components/interactive', replacement: resolve(__dirname, '../3d-components/src/interactive/index.ts') },
       { find: '@cyc/3d-components', replacement: resolve(__dirname, '../3d-components/src/index.ts') },
     ],
     // 关键：3d-components 通过 alias 引入时，强制 three/gsap 等解析到 3d-templete 的单一实例，

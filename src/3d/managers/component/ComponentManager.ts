@@ -93,6 +93,9 @@ export class ComponentManager {
             result.userData.__id = data.id;
           }
           result.userData.__componentType = entry.key;
+          // 命中的 3d-components 组件名（如 'BaseGroup'/'Grid'），供编辑态拾取回传 component 字段。
+          // data.component?.type 为库组件名；非组件实体（mesh/group）为 ''（picker 据此判断是否回传）。
+          result.userData.__componentName = data.component?.type ?? '';
           return result;
         }
         // handler 返回 null → 继续 kind 链下一项

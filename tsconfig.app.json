@@ -10,7 +10,8 @@
       "@cyc/3d-components/core": ["../3d-components/src/core/index.ts"],
       "@cyc/3d-components/heat": ["../3d-components/src/heat/index.ts"],
       "@cyc/3d-components/material": ["../3d-components/src/material/index.ts"],
-      "@cyc/3d-components/utils": ["../3d-components/src/utils/index.ts"]
+      "@cyc/3d-components/utils": ["../3d-components/src/utils/index.ts"],
+      "@cyc/3d-components/interactive": ["../3d-components/src/interactive/index.ts"]
     },
     "ignoreDeprecations": "6.0",
 
