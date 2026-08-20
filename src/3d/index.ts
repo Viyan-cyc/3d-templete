@@ -29,7 +29,6 @@ export { createScene3D } from './createScene3D';
 export type {
   Scene3DOptions,
   Scene3DHandle,
-  SceneUpdatePatch,
   OrbitControlsInstance,
 } from './createScene3D';
 
@@ -44,28 +43,26 @@ export type {
 export { ComponentManager, componentManager, registerComponentHandlers } from './managers/component';
 export type { ComponentHandler, ComponentContext } from './managers/component';
 
-// ---- live-data 数据格式（正统数据结构）----
-export { loadLiveDataConfig, applyLiveDataToApp, loadModelObjects } from './scene';
+// ---- 树形场景数据格式（分组扁平 + parentId）----
+export {
+  loadLiveDataConfig, applyLiveDataToApp, buildTreeScene, updateTreeScene, removeObjects,
+} from './scene';
 export { registerScenePreset, getScenePresets } from './scene';
 export type { ScenePreset } from './scene';
 export type {
-  LiveDataConfig,
+  TreeScene,
+  TreeNode,
+  TreeSceneEnv,
   LiveDataCamera,
   LiveDataLight,
-  LiveDataObject,
   LiveDataGeometry,
   LiveDataMaterial,
   ApplyLiveDataOptions,
 } from './scene';
 
-// ---- 产品数据归一化适配层 ----
+// ---- 坐标/销毁工具（scene/utils）----
 export {
-  registerAdapters, normalizeConfig, normalizeToModel, resolveAdapter,
-  registerTypeMappings, resolveTypeMapping, clearTypeMappings,
-  toVec, toPath, isEntityNode, toUpdatePatch, isUpdatePatch,
-} from './scene';
-export type {
-  SceneModel, Adapter, TypeMapping, TypeRegistry,
+  toVec, toPath, disposeObject, clearIndexSubtree,
 } from './scene';
 
 // ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----

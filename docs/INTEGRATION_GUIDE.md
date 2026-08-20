@@ -343,7 +343,7 @@ onUnmounted(() => {
 
 ### 4.4 component (3d-components) — 高级组件
 
-引用 `@cyc/3d-components` 组件库中的组件，通过 `component.type` 指定（库组件名 PascalCase）。支持 Grid、Wall、HeatMesh、Sky 等。
+引用 `@a3d/a3d-components` 组件库中的组件，通过 `component.type` 指定（库组件名 PascalCase）。支持 Grid、Wall、HeatMesh、Sky 等。
 
 ```jsonc
 {

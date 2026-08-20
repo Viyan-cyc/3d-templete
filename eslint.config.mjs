@@ -444,6 +444,7 @@ export default defineConfig([
     'docs/',
     'eslint.config.mjs',
     'vite.config.ts',
+    'vite/**/*.ts',
     '*.json'
   ]),
 ]);

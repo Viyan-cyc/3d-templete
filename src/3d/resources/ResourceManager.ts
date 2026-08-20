@@ -16,16 +16,17 @@
 import * as THREE from 'three';
 import {
   AssetCache, type CloneOptions, type ModelLoadOptions, type ModelGenerator,
-} from '@cyc/3d-components';
+} from '@a3d/a3d-components';
 import {
   MaterialManager,
   type MaterialChangeCallback,
   type MaterialConfig,
   type MaterialManagerOptions,
   type Unsubscriber,
-} from '@cyc/3d-components/material';
+} from '@a3d/a3d-components/material';
 import { createMaterialFromConfig, liveMaterialToConfig } from './createMaterial';
 import type { LiveDataMaterial } from '../scene/loader';
+import { searchAssetEntries, type AssetEntry, type AssetSearchResult } from '../../../assets-library/manifest';
 
 /** 模型克隆选项（阴影 + 克隆粒度），透传 AssetCache.cloneModel。 */
 export interface CloneModelOpts {
@@ -43,6 +44,9 @@ export class ResourceManager {
   private readonly cache = new AssetCache();
   private mm: MaterialManager | null = null;
   private hunyuanGenerator: HunyuanGenerator | null = null;
+
+  /** 资源库 manifest（setAssetManifest 注入，供 searchAssets 检索）。 */
+  private assetManifest: AssetEntry[] = [];
 
   // ────────────── 模型（模式A + 模式B 统一） ──────────────
 
@@ -62,6 +66,21 @@ export class ResourceManager {
   setHunyuanGenerator(fn: HunyuanGenerator): this {
     this.hunyuanGenerator = fn;
     return this;
+  }
+
+  /** 注入资源库 manifest（供 searchAssets 检索）。由 registerModels 调用，对齐 setHunyuanGenerator 注入模式。 */
+  setAssetManifest(entries: AssetEntry[]): this {
+    this.assetManifest = entries;
+    return this;
+  }
+
+  /**
+   * 检索资源库（Step 3 引擎内能力；search_assets LLM 工具 + postMessage 接线留 Step 7）。
+   * 按 query 匹配 name/category/tags/description，返回元数据（剥 src，不给 LLM 内部 URL）。
+   * 空 query 返回全部；任一词命中即返回（OR，宽召回）。
+   */
+  searchAssets(query: string): AssetSearchResult[] {
+    return searchAssetEntries(this.assetManifest, query);
   }
 
   /** 后台预加载模型（fire-and-forget，写入缓存）。 */

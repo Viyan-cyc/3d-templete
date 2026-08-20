@@ -7,7 +7,7 @@
  */
 import exampleJpgUrl from '../assets/textures/example.jpg?url';
 import { getResourceManager } from './ResourceManager';
-import type { MaterialConfig, Theme } from '@cyc/3d-components/material';
+import type { MaterialConfig, Theme } from '@a3d/a3d-components/material';
 
 // example 主题材质：贴图固定 example.jpg，主题调 roughness / metalness / color。
 const exampleDefault: MaterialConfig = {

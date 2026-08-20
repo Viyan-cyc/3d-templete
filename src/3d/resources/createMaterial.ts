@@ -6,7 +6,7 @@
  * 不重复实现工厂逻辑（类型映射 / 属性写入 / 槽位遍历都复用 3d-components）。
  */
 import type * as THREE from 'three';
-import type { AssetCache } from '@cyc/3d-components';
+import type { AssetCache } from '@a3d/a3d-components';
 import {
   createMaterial,
   applySyncProps,
@@ -16,7 +16,7 @@ import {
   hasSlot,
   type MaterialConfig,
   type MaterialType,
-} from '@cyc/3d-components/material';
+} from '@a3d/a3d-components/material';
 import type { LiveDataMaterial } from '../scene/loader';
 
 const VALID_TYPES = new Set<MaterialType>(['standard', 'basic', 'physical', 'phong', 'lambert']);

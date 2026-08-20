@@ -75,7 +75,7 @@ src/
 │   ├── components/                  # 组件层（三种组件来源都在此）
 │   │   ├── index.ts                 # 出口 + registerAllComponents()
 │   │   ├── AssetPool.ts             # Geometry/Material 缓存池（同参数共享实例）
-│   │   ├── library-bridge.ts        # @cyc/3d-components 的 type→Ctor 映射（自动扫描）
+│   │   ├── library-bridge.ts        # @a3d/a3d-components 的 type→Ctor 映射（自动扫描）
 │   │   ├── base/                    # 本地通用底座（无业务属性）
 │   │   │   ├── index.ts             # 底座出口
 │   │   │   ├── types.ts             # ComponentOptions（handler→组件的统一 options）
@@ -907,7 +907,7 @@ handle.update({
 
 ### 11.1 什么是 3d-components
 
-`@cyc/3d-components` 是独立的 3D 组件库，提供 Grid、Wall、HeatMesh、Sky 等 `THREE.Object3D` 子类。dev 阶段通过 vite alias 直引 `../3d-components/src`（见 [vite.config.ts](../vite.config.ts)），生产阶段改 `npm install @cyc/3d-components` 后移除 alias。
+`@a3d/a3d-components` 是独立的 3D 组件库，提供 Grid、Wall、HeatMesh、Sky 等 `THREE.Object3D` 子类。dev 阶段通过 vite alias 直引 `../3d-components/src`（见 [vite.config.ts](../vite.config.ts)），生产阶段改 `npm install @a3d/a3d-components` 后移除 alias。
 
 ### 11.2 使用方式
 
@@ -931,7 +931,7 @@ handle.update({
 
 ### 11.3 自动注册
 
-[components/library-bridge.ts](../src/3d/components/library-bridge.ts) 的 `initLibraryBridge()` 通过 `registerNamespace()` 扫描 `@cyc/3d-components/core`、`/heat`、`/material` 三个命名空间里所有 **首字母大写的 Object3D 子类**，自动建立 type→Ctor 映射。**新增 3d-components 组件无需改本工程**——只要它是 Object3D 子类且首字母大写，就会被自动注册。
+[components/library-bridge.ts](../src/3d/components/library-bridge.ts) 的 `initLibraryBridge()` 通过 `registerNamespace()` 扫描 `@a3d/a3d-components/core`、`/heat`、`/material` 三个命名空间里所有 **首字母大写的 Object3D 子类**，自动建立 type→Ctor 映射。**新增 3d-components 组件无需改本工程**——只要它是 Object3D 子类且首字母大写，就会被自动注册。
 
 > Material 子类（ShinyMaterial/MeshReflectorMaterial）不是 Object3D，暂不处理。
 
@@ -1103,7 +1103,7 @@ library (component.type 命中 library-bridge)  >  example (component.type==='ex
 | 新模型资产 | `src/3d/assets/models/xxx.glb` + `models/registry.ts` 注册 |
 | 新卡片组件 | `src/components/cards/XxxCard.vue` + `adapters/vue/sceneCardRules.ts` 加 `CardScanRule` |
 | 新场景预设 | `registerScenePreset('key', { ... })` 调用（无需改源码） |
-| 新 3d-components 组件 | `@cyc/3d-components` 包内开发，自动注册，无需改本工程 |
+| 新 3d-components 组件 | `@a3d/a3d-components` 包内开发，自动注册，无需改本工程 |
 | 新 postMessage 消息 | `bridge/postMessage-host.ts` 加类型+分支 + `views/embed.vue` 实现回调 |
 
 ### 15.4 性能注意

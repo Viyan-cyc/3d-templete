@@ -16,8 +16,6 @@
  *    不传  自动：有 frames 走帧表，否则 refetch
  * ============================================================
  */
-import type { SceneUpdatePatch } from '@/3d';
-
 export interface LiveDataPollerOptions {
 
   /** 模拟数据 / 轮询接口地址 */
@@ -46,7 +44,7 @@ export interface LiveDataPollerOptions {
 /** 静态 mock 的帧表结构 */
 interface MockFeed {
   intervalMs?: number
-  frames?: SceneUpdatePatch[]
+  frames?: unknown[]
 }
 
 /** 响应是帧表（有 frames 数组） */
@@ -66,7 +64,7 @@ const isFramesFeed = (data: unknown): boolean => {
 export class LiveDataPoller {
   private readonly opts: LiveDataPollerOptions;
   private timer: ReturnType<typeof setInterval> | null = null;
-  private frames: SceneUpdatePatch[] = [];
+  private frames: unknown[] = [];
   private cursor = 0;
   private _running = false;
 

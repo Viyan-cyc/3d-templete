@@ -1,24 +1,28 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
+import { hunyuanDevServer } from './vite/hunyuanDevServer.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
+    hunyuanDevServer(),
   ],
   resolve: {
     alias: [
       { find: '@', replacement: resolve(__dirname, 'src') },
       // dev 阶段：直接 alias 到 3d-components 源码，无需 build/install。
-      // 生产阶段改 package.json dependencies + npm install @cyc/3d-components 后移除这些 alias。
+      // 生产阶段改 package.json dependencies + npm install @a3d/a3d-components 后移除这些 alias。
       // 注意：子路径必须排在主路径之前（find 按顺序匹配，长的先匹配避免被主入口截获）
-      { find: '@cyc/3d-components/core', replacement: resolve(__dirname, '../3d-components/src/core/index.ts') },
-      { find: '@cyc/3d-components/heat', replacement: resolve(__dirname, '../3d-components/src/heat/index.ts') },
-      { find: '@cyc/3d-components/material', replacement: resolve(__dirname, '../3d-components/src/material/index.ts') },
-      { find: '@cyc/3d-components/utils', replacement: resolve(__dirname, '../3d-components/src/utils/index.ts') },
-      { find: '@cyc/3d-components/interactive', replacement: resolve(__dirname, '../3d-components/src/interactive/index.ts') },
-      { find: '@cyc/3d-components', replacement: resolve(__dirname, '../3d-components/src/index.ts') },
+      // @a3d 是 dev 历史别名；@a3d 是 package.json 真实名（生产/dist 用）。dev 同源 alias，
+      // 让 LLM 生成代码用任一包名都能 resolve（治「包名不一致」根因）。
+      { find: '@a3d/a3d-components/core', replacement: resolve(__dirname, '../3d-components/src/core/index.ts') },
+      { find: '@a3d/a3d-components/heat', replacement: resolve(__dirname, '../3d-components/src/heat/index.ts') },
+      { find: '@a3d/a3d-components/material', replacement: resolve(__dirname, '../3d-components/src/material/index.ts') },
+      { find: '@a3d/a3d-components/utils', replacement: resolve(__dirname, '../3d-components/src/utils/index.ts') },
+      { find: '@a3d/a3d-components/interactive', replacement: resolve(__dirname, '../3d-components/src/interactive/index.ts') },
+      { find: '@a3d/a3d-components', replacement: resolve(__dirname, '../3d-components/src/index.ts') },
     ],
     // 关键：3d-components 通过 alias 引入时，强制 three/gsap 等解析到 3d-templete 的单一实例，
     // 否则 3d-components 与 3d-templete 各拿一份 three → "Multiple instances of Three.js" 警告，

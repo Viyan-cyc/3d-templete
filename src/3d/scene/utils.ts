@@ -1,11 +1,12 @@
 /**
- * adapters/utils — 通用坐标/节点识别工具
+ * scene/utils — 通用坐标 / 销毁 / 索引清理工具（scene 层共享）
  *
  * 产品数据坐标可能是 {x,y,z} 对象（wall/door/fishes）或 [x,y,z] 数组（ceiling），
  * toVec 两种都吃、统一输出 [x,y,z]，不强制产品改格式。
  *
- * 实体识别：对象 + 有字符串/数字 id = 实体节点（参数对象 path/position/info 无 id）。
+ * disposeObject / clearIndexSubtree 供 objects.ts 与各 handler 复用（update 时清旧子树 + 索引）。
  */
+import type * as THREE from 'three';
 
 type Vec3 = [number, number, number];
 
@@ -54,11 +55,40 @@ export const toPath = (arr: unknown): Vec3[] => {
   return out;
 };
 
-/** 判断是否为实体节点：非数组对象 + 有字符串/数字 id */
-export const isEntityNode = (v: unknown): boolean => {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) {
-    return false;
-  }
-  const id = (v as Record<string, unknown>).id;
-  return typeof id === 'string' || typeof id === 'number';
+/** dispose 一个 Object3D 及其子孙的几何/材质（共享资源由 handler 自管时，handler.delete 返回 true 跳过此默认逻辑） */
+export const disposeObject = (obj: THREE.Object3D): void => {
+  obj.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) {
+      return;
+    }
+    const mesh = child as THREE.Mesh;
+    mesh.geometry?.dispose();
+    const mat = mesh.material;
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => m.dispose());
+    } else {
+      mat?.dispose();
+    }
+  });
+};
+
+/**
+ * 从 index 移除 obj 子孙（默认不含 obj 自身）的 __id 条目。
+ * update 时 handler 清旧子树前调用，避免索引残留指向已销毁对象。
+ * @param includeSelf true 时连 obj 自身的 __id 一并移除（delete 整棵子树时用）
+ */
+export const clearIndexSubtree = (
+  obj: THREE.Object3D,
+  index: Map<string, THREE.Object3D>,
+  includeSelf = false,
+): void => {
+  obj.traverse((child) => {
+    if (!includeSelf && child === obj) {
+      return;
+    }
+    const id = child.userData?.__id;
+    if (typeof id === 'string' && id !== '') {
+      index.delete(id);
+    }
+  });
 };

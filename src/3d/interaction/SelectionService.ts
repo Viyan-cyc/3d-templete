@@ -21,7 +21,7 @@
  */
 
 import type * as THREE from 'three';
-import type { InteractiveManager, IntersectionEvent } from '@cyc/3d-components/interactive';
+import type { InteractiveManager, IntersectionEvent } from '@a3d/a3d-components/interactive';
 import type { SelectionVisuals } from './SelectionVisuals';
 
 /** 拾取结果。id 为空串表示点击空白处（取消选中）。 */

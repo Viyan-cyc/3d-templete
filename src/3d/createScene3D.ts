@@ -3,12 +3,12 @@
  *  createScene3D — 3D 模块唯一对外主入口
  *
  *  业务方只需：
- *    const data = await fetch('/api/scene').then(r => r.json())  // 数据由业务方请求
+ *    const data = await fetch('/api/scene').then(r => r.json())  // 分组扁平 TreeScene
  *    const handle = createScene3D(canvas, data, { cardRules })
  *    handle.onCardState(states => cardStates.value = states)
  *
- *    // 之后按 id 增删改物体（移动的 AGV、变色的状态、动态增删实体…）
- *    handle.update({ objects: { upsert: [...], remove: [...] } })
+ *    // 之后全量推送更新（分组字典 + 可选 remove:[ids]，不 diff）
+ *    handle.update({ buildings: [...], remove: ['wave'] })
  *
  *    onUnmounted(() => handle.dispose())
  *
@@ -29,19 +29,15 @@ import type { CardStateCallback, CardScanRule } from './managers/card/types';
 import { createOrbitControls } from './controls/OrbitControls';
 import {
   applyLiveDataToApp,
-  loadModelObjects,
-  removeObjects,
-  upsertObjects,
-  registerAdapters,
-  normalizeToModel,
+  mergeWithPreset,
+  updateTreeScene,
   type ObjectIndex,
-  type LiveDataConfig,
-  type LiveDataObject,
+  type TreeScene,
 } from './scene';
 import { SelectionService } from './interaction/SelectionService';
 import { SelectionVisuals } from './interaction/SelectionVisuals';
 import { CameraRig } from './interaction/CameraRig';
-import { InteractiveManager } from '@cyc/3d-components/interactive';
+import { InteractiveManager } from '@a3d/a3d-components/interactive';
 import { registerComponentHandlers, disposeComponentHandlers } from './managers';
 import { sharedState } from './managers/component/handlers/base/shared';
 import { registerModels, registerMaterials, getResourceManager } from './resources';
@@ -91,27 +87,12 @@ export interface Scene3DOptions {
   preset?: string
 }
 
-/** 物体级增量更新补丁 */
-export interface SceneUpdatePatch {
-  objects?: {
-
-    /** 按 id 增/改（id 已存在则就地补丁，保留身份；不存在则创建并挂父） */
-    upsert?: LiveDataObject[]
-
-    /** 按 id 删除 */
-    remove?: string[]
-  }
-}
-
 export interface Scene3DHandle {
   app: App3D
   cardManager: CardManager
 
-  /** 原始数据（投影不替换：归一化前的产品数据原样保留，供业务侧读 roads.length 等） */
+  /** 原始数据（分组扁平 TreeScene，业务侧读 handle.source.buildings.length 等） */
   source: unknown
-
-  /** 数据层索引：id → LiveDataObject（归一化后实体的当前数据，按 id 查；update 时维护） */
-  dataMap: Map<string, LiveDataObject> | undefined
 
   /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
   controls: OrbitControlsInstance
@@ -120,10 +101,10 @@ export interface Scene3DHandle {
   onCardState(cb: CardStateCallback): () => void
 
   /**
-   * 物体级增量更新（按 id 增删改），自动同步受影响的卡片。
-   * source 可选：传入则同步更新 handle.source / sharedState.source（产品全量更新场景传原始数据）。
+   * 增量更新（全量分组字典 + 可选 remove）。先 remove，再对根节点 update/create，不 diff。
+   * source 可选：传入则同步更新 handle.source / sharedState.source。
    */
-  update(patch: SceneUpdatePatch, source?: unknown): void
+  update(tree: TreeScene, source?: unknown): void
 
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
   setDebug(mode: boolean): void
@@ -185,10 +166,10 @@ const setupUpdatables = (app: App3D): void => {
 const createCameraRig = (
   app: App3D,
   controls: OrbitControlsInstance,
-  data: LiveDataConfig,
+  merged: TreeScene,
 ): CameraRig => {
   const initialPosition = app.camera.position.clone();
-  const lookAt = data.camera?.lookAt;
+  const lookAt = merged.camera?.lookAt;
   const initialTarget =
     Array.isArray(lookAt) && lookAt.length >= 3
       ? new THREE.Vector3(Number(lookAt[0]), Number(lookAt[1]), Number(lookAt[2]))
@@ -233,33 +214,13 @@ const createHandle = (params: {
     get source() {
       return source;
     },
-    get dataMap() {
-      return sharedState.dataMap;
-    },
     onCardState: (cb) => cardManager.onStateChange(cb),
-    update(patch: SceneUpdatePatch, sourceData?: unknown): void {
+    update(tree: TreeScene, sourceData?: unknown): void {
       if (sourceData !== undefined) {
         source = sourceData;
         sharedState.source = sourceData;
       }
-      const map = sharedState.dataMap;
-      const changed: string[] = [];
-      if (patch.objects?.remove?.length) {
-        if (map) {
-          for (const id of patch.objects.remove) {
-            map.delete(id);
-          }
-        }
-        changed.push(...removeObjects(app.scene, objectIndex, patch.objects.remove));
-      }
-      if (patch.objects?.upsert?.length) {
-        if (map) {
-          for (const obj of patch.objects.upsert) {
-            map.set(obj.id, obj);
-          }
-        }
-        changed.push(...upsertObjects(app.scene, objectIndex, patch.objects.upsert));
-      }
+      const changed = updateTreeScene(app.scene, objectIndex, tree);
       cardManager.refreshCards(app.scene, cardRules ?? [], changed);
     },
     setDebug(mode: boolean): void {
@@ -287,25 +248,24 @@ const createHandle = (params: {
   };
 };
 
-/** 归一化产品数据并应用到场景：建环境/物体全量、设置 sharedState，返回归一化配置与物体索引 */
+/** 应用树形场景数据到场景：建环境/物体全量、设置 sharedState，返回合并配置与物体索引 */
 const applySceneData = (
   app: App3D,
-  data: LiveDataConfig,
+  data: TreeScene,
   container: HTMLElement,
   preset: string | undefined,
-): { normalized: LiveDataConfig; objectIndex: ObjectIndex } => {
-  const model = normalizeToModel(data);
-  const normalized: LiveDataConfig = { ...data, objects: model.objects };
-  // 供 handler 通过 ctx.shared.source 读原数据 / ctx.shared.dataMap 按 id 查数据
+): { merged: TreeScene; objectIndex: ObjectIndex } => {
+  // 供 handler 通过 ctx.shared.source 读原数据
   sharedState.source = data;
-  sharedState.dataMap = new Map<string, LiveDataObject>(model.objects.map((o) => [o.id, o]));
+  // 合并预设（供 createCameraRig 读 camera.lookAt；applyLiveDataToApp 内部也会合并，幂等）
+  const merged = mergeWithPreset(data, preset ?? 'dark');
   const width = app.canvas.clientWidth || container.clientWidth || 1;
   const height = app.canvas.clientHeight || container.clientHeight || 1;
-  const objectIndex: ObjectIndex = applyLiveDataToApp(app, normalized, {
+  const objectIndex: ObjectIndex = applyLiveDataToApp(app, data, {
     viewSize: { width, height },
     preset,
   });
-  return { normalized, objectIndex };
+  return { merged, objectIndex };
 };
 
 /** CSS2D 卡片层：创建 CSS2DRenderer 并挂载到容器（绝对定位、不挡指针）；DOM 钉到 3D 物体由 render(scene) 遍历投影 */
@@ -321,11 +281,11 @@ const setupCss2DRenderer = (container: HTMLElement): CSS2DRenderer => {
 };
 
 /**
- * 初始化一个完整的 live-data 驱动 3D 场景。
+ * 初始化一个完整的树形场景驱动 3D 场景。
  */
 export const createScene3D = async (
   canvas: HTMLCanvasElement,
-  data: LiveDataConfig,
+  data: TreeScene,
   options: Scene3DOptions = {},
 ): Promise<Scene3DHandle> => {
   const {
@@ -336,9 +296,8 @@ export const createScene3D = async (
   // URL 参数优先于 options.debug
   const debug = readDebugFromURL() || options.debug || false;
 
-  // 0. 注册业务 handler + 数据 adapter + 资源（模型/材质注册表 + 全局 ResourceManager，幂等）
+  // 0. 注册业务 handler + 资源（模型/材质注册表 + 全局 ResourceManager，幂等）
   registerComponentHandlers();
-  registerAdapters();
   registerModels();
   registerMaterials();
   sharedState.resources = getResourceManager();
@@ -360,10 +319,10 @@ export const createScene3D = async (
   });
   sharedState.interactiveManager = interactiveManager;
 
-  // 3. 应用数据（归一化 + 建环境/物体 + sharedState），拿到 id→Object3D 索引供 update 用
-  const { normalized, objectIndex } = applySceneData(app, data, container, preset);
+  // 3. 应用数据（建环境/物体全量 + sharedState），拿到 id→Object3D 索引供 update 用
+  const { merged, objectIndex } = applySceneData(app, data, container, preset);
 
-  // applySceneData 内 createLiveEnvironment 会新建相机（透视/正交）并 app.setCamera 替换，
+  // applySceneData 内 applyEnvironment 会新建相机（透视/正交）并 app.setCamera 替换，
   // 必须同步给交互底座 —— 否则 InteractiveManager 仍用构造时捕获的旧相机，setFromCamera 算出的
   // 射线与渲染画面错位，点击全打偏（只命中包围场景的 Sky 球壁）。
   interactiveManager.setCamera(app.camera);
@@ -393,16 +352,11 @@ export const createScene3D = async (
   });
   resizeObserver.observe(container);
 
-  // 8. 异步加载外部模型（占位节点已在 applyLiveDataToApp 中创建）
-  loadModelObjects(objectIndex, normalized.objects).catch((err) => {
-    console.error('[createScene3D] 模型加载失败:', err);
-  });
-
-  // 9. 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update）
+  // 8. 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update）
   setupUpdatables(app);
 
-  // 10. 相机操作（通用，注入 sharedState 供 handler 用）+ 编辑态选择服务（仅 interactive:true）
-  const cameraRig = createCameraRig(app, controls, normalized);
+  // 9. 相机操作（通用，注入 sharedState 供 handler 用）+ 编辑态选择服务（仅 interactive:true）
+  const cameraRig = createCameraRig(app, controls, merged);
   sharedState.cameraRig = cameraRig;
   const selection = interactive ? setupSelection(app, interactiveManager) : undefined;
 

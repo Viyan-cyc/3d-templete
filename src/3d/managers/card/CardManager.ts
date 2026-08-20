@@ -1,5 +1,5 @@
 import type * as THREE from 'three';
-import type { IntersectionEvent, InteractiveManager } from '@cyc/3d-components/interactive';
+import type { IntersectionEvent, InteractiveManager } from '@a3d/a3d-components/interactive';
 import { CardComponentRegistry, cardComponentRegistry } from './CardRegistry';
 import { Css2dCard } from '../../components/base';
 import type {

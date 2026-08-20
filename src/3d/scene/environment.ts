@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { App3D } from '../App3D';
-import type { LiveDataConfig, LiveDataLight } from './loader';
+import type { TreeScene, LiveDataLight } from './loader';
 import { parseVec3 } from '../components/base/transform';
 
 // ── 灯光工厂 ──
@@ -68,7 +68,7 @@ const createLiveLight = (cfg: LiveDataLight): THREE.Light | null => {
 };
 
 /** 根据 config.scene.environment 建立 PMREM 环境光（默认 RoomEnvironment） */
-const applyPMREM = (app: App3D, merged: LiveDataConfig): void => {
+const applyPMREM = (app: App3D, merged: TreeScene): void => {
   const env = merged.scene?.environment;
   const pmrem = new THREE.PMREMGenerator(app.renderer);
   const intensity = env?.intensity;
@@ -85,7 +85,7 @@ const applyPMREM = (app: App3D, merged: LiveDataConfig): void => {
  */
 export const applyEnvironment = (
   app: App3D,
-  merged: LiveDataConfig,
+  merged: TreeScene,
   viewSize: { width: number; height: number },
   keepExisting?: boolean,
 ): void => {

@@ -7,7 +7,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/Scene3D.vue'),
   },
   {
-    // 预览/编辑入口：供 octoapp iframe 嵌入，走 postMessage 桥
+    // 预览/编辑入口：供 octoapp iframe 嵌入，走 postMessage 桥（老 JSON 路径，原 3D 页用）
     path: '/embed',
     name: 'Embed',
     component: () => import('@/views/Embed.vue'),

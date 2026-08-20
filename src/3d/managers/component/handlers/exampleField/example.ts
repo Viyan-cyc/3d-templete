@@ -4,17 +4,19 @@
  * 资源创建在 handler：克隆 example.glb（asset:example）+ 取主题材质（copy('example')）。
  * 材质走 MaterialManager（模式B），setTheme 一键换肤原地改写同一实例（引用不变）。
  * model + material 都到位后通过 setResources(model, material) 传给组件（组件纯展示）。
+ *
+ * 树原生契约：node = { type:'example', id, params:{position,rotation,scale}, parentId:null }。
  */
 import type * as THREE from 'three';
 import type { ComponentHandler, ComponentContext } from '../../ComponentManager';
-import type { LiveDataObject } from '../../../../scene/loader';
+import type { TreeNode } from '../../../../scene/loader';
 import { ExampleComponent } from '../../../../components/exampleField';
 import { getResourceManager } from '../../../../resources';
 import { toOptions } from '../base/options';
 
 export const exampleHandler: ComponentHandler = {
-  create(data: LiveDataObject, ctx: ComponentContext) {
-    const opts = toOptions(data);
+  create(node: TreeNode, ctx: ComponentContext) {
+    const opts = toOptions(node);
     const comp = new ExampleComponent(opts);
     const res = getResourceManager();
 
@@ -53,14 +55,14 @@ export const exampleHandler: ComponentHandler = {
         // 物体互斥消失（interactiveGroup:'scene'）。卡片内容由适配层注册的 ExampleCard.vue 经
         // CardHost Teleport 进 domEl 渲染，props 透传给组件；delete 时 removeCard 同步清理。
         const cardManager = ctx.shared.cardManager;
-        cardManager?.addCard(data.id, 'example', m, {
+        cardManager?.addCard(node.id, 'example', m, {
           mode: 'click',
           interactiveGroup: 'scene',
           offset: [0, 1.5, 0],
           props: {
-            label: data.id,
-            type: data.type,
-            position: data.position,
+            label: node.id,
+            type: node.type,
+            position: node.params.position,
           },
         });
 
@@ -69,7 +71,7 @@ export const exampleHandler: ComponentHandler = {
         // 支持 InteractiveManager 全部事件：onClick/onDoubleClick/onPointerDown/Up/Move/Over/Out/Enter/
         // Leave/onWheel/onContextMenu…（按需声明，未声明不监听）。
         const manager = ctx.shared.interactiveManager;
-        const subId = `example:${data.id}`;
+        const subId = `example:${node.id}`;
         manager?.add(m, {
           onClick: () => {
             // 卡片显隐由 cardManager 自动 toggle；此处可写其它点击逻辑（如 cameraRig.flyTo 聚焦）
@@ -78,7 +80,7 @@ export const exampleHandler: ComponentHandler = {
 
         comp.userData.__pointerUnsub = () => {
           manager?.remove(m, subId);
-          cardManager?.removeCard(data.id);
+          cardManager?.removeCard(node.id);
         };
 
         assemble();

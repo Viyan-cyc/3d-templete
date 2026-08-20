@@ -1,341 +1,227 @@
 /**
- * objects — 物体生命周期：创建 / 挂载 / 更新 / 删除 / 销毁。
+ * objects — 物体生命周期：创建 / 更新 / 删除（分组扁平 + parentId 树原生）。
  *
- * - buildObjects:全量建(create + 两遍挂载 + zone/logicalRoot 标记)→ 返回 ObjectIndex
- * - upsertObjects / removeObjects:按 id 增量改/删
- * - loadModelObjects:异步填充带 src 的模型占位
+ * - buildTreeScene:全量建(展开 nodeMap → 对根节点分发 create → 挂 scene)→ 返回 ObjectIndex
+ * - updateTreeScene:先 remove，再对存在的根节点 update / 新根节点 create。不 diff。
+ * - removeObjects:按 id 删(含 handler.delete 资源清理)
  *
- * 创建走 ComponentManager(data → manager → handlers → components);patch/dispose 是
- * update/delete 的 defaultFn,复用 components 层工厂,保证增量与初始化一致。
+ * 创建走 ComponentManager(node → manager → handler → components)；patch/dispose 是
+ * update/delete 的 defaultFn，保证增量与初始化一致。
  */
-import * as THREE from 'three';
-import type { LiveDataObject } from './loader';
+import type * as THREE from 'three';
+import type { TreeScene, TreeNode } from './loader';
 import { componentManager, type ComponentContext, type ObjectIndex } from '../managers/component/ComponentManager';
 import { sharedState } from '../managers/component/handlers/base/shared';
-import { getResourceManager } from '../resources';
-import { applyTransform, createGeometry } from '../components';
+import { disposeObject, toVec } from './utils';
 
 // ObjectIndex 定义在 ComponentManager（manager 层），此处 re-export 供 scene/index、3d/index 取用
 export type { ObjectIndex } from '../managers/component/ComponentManager';
 
-// ── 共用 helper ──
+// ── nodeMap 构建 ──
 
-/** 组件节点展开的子节点注册进 index（供其他物体 parentId 引用 + raycast 识别） */
-const registerComponentChildren = (node: THREE.Object3D, index: ObjectIndex): void => {
-  node.traverse((child) => {
-    if (child.userData?.id && child !== node) {
-      index.set(child.userData.id, child);
-    }
-  });
+/** 保留的顶层 key（非 type 分组：环境字段 + remove） */
+const RESERVED_KEYS = new Set(['version', 'scene', 'camera', 'lights', 'remove']);
+
+interface NodeIndex {
+
+  /** id → TreeNode */
+  nodes: Map<string, TreeNode>;
+
+  /** parentId → children[]（跨分组） */
+  children: Map<string, TreeNode[]>;
+}
+
+/** 单条 raw → TreeNode（非对象 / 无 id 返回 null）。 */
+const toNode = (type: string, raw: unknown): TreeNode | null => {
+  if (typeof raw !== 'object' || raw === null) {
+    return null;
+  }
+  const r = raw as Record<string, unknown>;
+  const id = r.id === undefined || r.id === null ? '' : String(r.id);
+  if (!id) {
+    return null;
+  }
+  return {
+    type,
+    id,
+    params: (typeof r.params === 'object' && r.params !== null ? r.params : {}) as Record<string, unknown>,
+    parentId: r.parentId === undefined || r.parentId === null ? null : String(r.parentId),
+  };
 };
 
 /**
- * 全量标记分区(__zone)/逻辑根(__logicalRoot)，供 ScenePicker「整体/部件」选中模式。
- * zone 身份优先读 o.__zone(权威源,支持嵌套分区);无标记时回落到「root 直接子=zone」启发式。
- * logicalRoot = zone 的直接子(用户视角的"一个整体");排除自身也是 zone 的节点(嵌套分区 bug 修复)。
- * 纯 parentId 图计算,不依赖 Three 挂载结果。
+ * 把 TreeScene 的 type 分组展开成 id→TreeNode + parentId→children[] 索引。
+ * 节点 type = 所在分组 key（节点自身不带 type 字段）。
  */
-const markZones = (objects: LiveDataObject[], index: ObjectIndex): void => {
-  const rootIds = new Set<string>();
-  for (const o of objects) {
-    if (!o.parentId) {
-      rootIds.add(o.id);
-    }
-  }
-  const zoneIds = new Set<string>();
-  for (const o of objects) {
-    if (o.__zone) {
-      zoneIds.add(o.id);
-    }
-  }
-  if (zoneIds.size === 0) {
-    for (const o of objects) {
-      if (o.parentId && rootIds.has(o.parentId)) {
-        zoneIds.add(o.id);
+const buildNodeIndex = (tree: TreeScene): NodeIndex => {
+  const nodes = new Map<string, TreeNode>();
+  const children = new Map<string, TreeNode[]>();
+  for (const [type, val] of Object.entries(tree)) {
+    if (Array.isArray(val) && !RESERVED_KEYS.has(type)) {
+      for (const raw of val) {
+        const node = toNode(type, raw);
+        if (node) {
+          nodes.set(node.id, node);
+          if (node.parentId !== null) {
+            const arr = children.get(node.parentId) ?? [];
+            arr.push(node);
+            children.set(node.parentId, arr);
+          }
+        }
       }
     }
   }
-  for (const id of zoneIds) {
-    const n = index.get(id);
-    if (n) {
-      n.userData.__zone = true;
-    }
+  return { nodes, children };
+};
+
+// ── 共用 helper ──
+
+/** 构造 handler 上下文（getChildren/getNode 绑定到当前推送的 nodeMap） */
+const buildCtx = (scene: THREE.Scene, index: ObjectIndex, nodeIndex: NodeIndex): ComponentContext => ({
+  scene,
+  index,
+  shared: sharedState,
+  loadModel: (src, opts) => sharedState.resources.cloneModel(src, opts),
+  getChildren: (parentId: string) => nodeIndex.children.get(parentId) ?? [],
+  getNode: (id: string) => nodeIndex.nodes.get(id),
+});
+
+/** 就地补丁默认实现（handler 未实现 update 时回落）：只改 transform */
+const patchObject = (obj: THREE.Object3D, node: TreeNode): void => {
+  const pos = toVec(node.params.position);
+  if (pos) {
+    obj.position.set(...pos);
   }
-  for (const o of objects) {
-    if (o.parentId && zoneIds.has(o.parentId) && !zoneIds.has(o.id)) {
-      const n = index.get(o.id);
-      if (n) {
-        n.userData.__logicalRoot = true;
-      }
-    }
+  const rot = toVec(node.params.rotation);
+  if (rot) {
+    obj.rotation.set(...rot);
+  }
+  const scl = toVec(node.params.scale);
+  if (scl) {
+    obj.scale.set(...scl);
+  }
+  if (node.params.castShadow !== undefined) {
+    obj.castShadow = node.params.castShadow as boolean;
+  }
+  if (node.params.receiveShadow !== undefined) {
+    obj.receiveShadow = node.params.receiveShadow as boolean;
   }
 };
 
-/** 增量单节点 zone/logicalRoot 标记（best-effort：只看自身 __zone 标记 + 父节点是否 zone） */
-const markZoneSingle = (def: LiveDataObject, node: THREE.Object3D, index: ObjectIndex): void => {
-  if (def.__zone) {
-    node.userData.__zone = true;
-  }
-  if (def.parentId) {
-    const parent = index.get(def.parentId);
-    if (parent?.userData.__zone) {
-      node.userData.__logicalRoot = true;
-    }
-  }
-};
-
-/** 就地补丁:transform 总是应用;mesh 额外按需重建 material/geometry */
-const patchObject = (obj: THREE.Object3D, def: LiveDataObject): void => {
-  applyTransform(obj, def);
-
-  if ((obj as THREE.Mesh).isMesh) {
-    const mesh = obj as THREE.Mesh;
-    if (def.material) {
-      const old = mesh.material;
-      if (Array.isArray(old)) {
-        old.forEach((m) => m.dispose());
-      } else {
-        old?.dispose();
-      }
-      mesh.material = getResourceManager().createMaterialFromLive(def.material);
-    }
-    if (def.geometry) {
-      const geo = createGeometry(def.geometry);
-      if (geo) {
-        mesh.geometry?.dispose();
-        mesh.geometry = geo;
-      }
-    }
-  }
-
-  if (def.castShadow !== undefined) {
-    obj.castShadow = def.castShadow;
-  }
-  if (def.receiveShadow !== undefined) {
-    obj.receiveShadow = def.receiveShadow;
-  }
-};
-
-/** dispose 一个 Object3D 及其子孙的几何/材质 */
-const disposeObject = (obj: THREE.Object3D): void => {
-  obj.traverse((child) => {
-    if (!(child as THREE.Mesh).isMesh) {
-      return;
-    }
-    const mesh = child as THREE.Mesh;
-    mesh.geometry?.dispose();
-    const mat = mesh.material;
-    if (Array.isArray(mat)) {
-      mat.forEach((m) => m.dispose());
-    } else {
-      mat?.dispose();
-    }
-  });
-};
+/** debug 开关 */
+const isDebug = (): boolean =>
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true';
 
 // ══════════════════════════════════════════════════════════════
 // 全量构建
 // ══════════════════════════════════════════════════════════════
 
 /**
- * 全量建物体:两遍(create → 挂父)+ zone/logicalRoot 标记。返回 id→Object3D 索引。
+ * 全量建场景：展开 nodeMap → 对根节点(parentId=null)分发 create → 挂 scene。
+ * 子节点由父 handler 通过 ctx.getChildren 递归建。返回 id→Object3D 索引。
  */
-export const buildObjects = (
-  scene: THREE.Scene,
-  objects: LiveDataObject[],
-): ObjectIndex => {
-  const nodeMap: ObjectIndex = new Map();
-  const ctx: ComponentContext = { scene, index: nodeMap, shared: sharedState };
-  let createdCount = 0;
-  let skippedCount = 0;
-  const debug =
-    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true';
+export const buildTreeScene = (scene: THREE.Scene, tree: TreeScene): ObjectIndex => {
+  const index: ObjectIndex = new Map();
+  const nodeIndex = buildNodeIndex(tree);
+  const ctx = buildCtx(scene, index, nodeIndex);
+  let created = 0;
+  let skipped = 0;
 
-  if (objects.length === 0) {
-    return nodeMap;
-  }
-
-  // 第一遍:创建(走 ComponentManager → handler → new 组件)
-  for (const oc of objects) {
-    const node = componentManager.create(oc, ctx);
-    if (node) {
-      createdCount++;
-      nodeMap.set(oc.id, node);
-      // 组件节点:把展开的子节点也注册进 nodeMap,供其他物体的 parentId 引用
-      if (oc.type === 'component') {
-        registerComponentChildren(node, nodeMap);
-      }
-    } else {
-      // 解析失败(如未知 geometry/src/builder 名):打 warn 便于定位。
-      skippedCount++;
-      console.warn(`[objects] 无法创建物体，跳过: id=${oc.id} type=${oc.type}` +
-          ` component.type=${oc.component?.type}` +
-          ` src=${oc.src ?? '-'} geometry=${oc.geometry?.type ?? '-'}`);
-    }
-  }
-
-  // 第二遍:挂载父节点
-  for (const oc of objects) {
-    const node = nodeMap.get(oc.id);
-    if (node) {
-      const parent = oc.parentId ? nodeMap.get(oc.parentId) : undefined;
-      (parent ?? scene).add(node);
-    }
-  }
-
-  // 标记分区(__zone)/逻辑根(__logicalRoot),供 ScenePicker「整体/部件」选中模式
-  markZones(objects, nodeMap);
-
-  if (debug) {
-    console.log(`[objects] 场景构建完成: 创建 ${createdCount}/${objects.length} 物体${
-      skippedCount > 0 ? `，跳过 ${skippedCount} 个（见上方 warn）` : ''}`);
-  }
-
-  return nodeMap;
-};
-
-// ══════════════════════════════════════════════════════════════
-// 增量:增/改/删
-// ══════════════════════════════════════════════════════════════
-
-/**
- * 按 id 增/改物体。返回本次变更的物体 name 列表(供 refreshCards 用)。
- * 两遍:第一遍补丁已有 / 创建新的,第二遍把新节点挂到父(兼容「子先于父」乱序)。
- */
-export const upsertObjects = (
-  scene: THREE.Scene,
-  index: ObjectIndex,
-  defs: LiveDataObject[],
-): string[] => {
-  const changedNames: string[] = [];
-  const created: Array<{ node: THREE.Object3D; parentId: string | null }> = [];
-
-  const ctx = { scene, index, shared: sharedState };
-  for (const def of defs) {
-    const existing = index.get(def.id);
-    if (existing) {
-      // 通过 ComponentManager 分派更新:handler 处理则跳过 default,否则回落 patchObject
-      componentManager.update(existing, def, ctx, patchObject);
-      changedNames.push(existing.name || def.id);
-    } else {
-      // 通过 ComponentManager 分派创建:按 kind 链 handler → new 组件
-      const node = componentManager.create(def, ctx);
-      if (node) {
-        index.set(def.id, node);
-        // 与 buildObjects 对齐:注册组件子节点 + 单节点 zone/logicalRoot 标记
-        if (def.type === 'component') {
-          registerComponentChildren(node, index);
-        }
-        markZoneSingle(def, node, index);
-        created.push({ node, parentId: def.parentId ?? null });
-        changedNames.push(node.name || def.id);
+  for (const [, node] of nodeIndex.nodes) {
+    // 只分发根节点；子节点靠父 handler 递归建
+    if (node.parentId === null) {
+      const obj = componentManager.create(node, ctx);
+      if (obj) {
+        created++;
+        index.set(node.id, obj);
+        scene.add(obj);
+      } else {
+        skipped++;
+        console.warn(`[objects] 无 handler 或 create 返回 null，跳过: id=${node.id} type=${node.type}`);
       }
     }
   }
 
-  // 第二遍:挂父节点
-  for (const { node, parentId } of created) {
-    const parent = parentId ? index.get(parentId) : undefined;
-    if (parent) {
-      parent.add(node);
-    } else {
-      scene.add(node);
-    }
+  if (isDebug()) {
+    console.log(`[objects] 场景构建完成: 创建 ${created} 个根实体${skipped > 0 ? `，跳过 ${skipped} 个（见上方 warn）` : ''}`);
   }
-
-  return changedNames;
+  return index;
 };
+
+// ══════════════════════════════════════════════════════════════
+// 删除
+// ══════════════════════════════════════════════════════════════
 
 /**
  * 按 id 删除物体。返回被删物体的 name 列表(供 refreshCards 用)。
- * 只处理显式传入的 id;若删的是父节点,其子孙被 three 一并移除但不会 dispose,
- * 也不会自动清出 index——需要的话请把子孙 id 一并传入。
+ * 通过 ComponentManager 分派 delete：handler 处理则跳过 default，否则回落 disposeObject。
  */
 export const removeObjects = (scene: THREE.Scene, index: ObjectIndex, ids: string[]): string[] => {
-  const changedNames: string[] = [];
-  const ctx = { scene, index, shared: sharedState };
+  const changed: string[] = [];
+  const ctx: ComponentContext = {
+    scene,
+    index,
+    shared: sharedState,
+    loadModel: (src, opts) => sharedState.resources.cloneModel(src, opts),
+    getChildren: () => [],
+    getNode: () => undefined,
+  };
   for (const id of ids) {
     const obj = index.get(id);
     if (obj) {
-      changedNames.push(obj.name || id);
-      // 通过 ComponentManager 分派删除:handler 处理则跳过 default,否则回落 disposeObject
+      changed.push(obj.name || id);
       componentManager.delete(obj, ctx, disposeObject);
       obj.removeFromParent();
       index.delete(id);
     }
   }
-  return changedNames;
+  return changed;
 };
 
 // ══════════════════════════════════════════════════════════════
-// 异步模型填充(占位节点由 ModelComponent 创建,此处填充内容)
+// 增量更新：remove + upsert（不 diff）
 // ══════════════════════════════════════════════════════════════
 
 /**
- * 异步加载场景中所有带 src 的模型(type='glb'/'model',或 component 未命中回落 src)。
- * 在 buildObjects 同步构建场景后调用,将模型填充到占位 Group 中。
- *
- * 走 ModelLoader provider 链(asset/http/hunyuan),内置原型缓存 + clone 复用。
- * hunyuan: 前缀走单次生成缓存,失败回落 mesh 兜底 + SCENE_ERROR。
+ * 增量更新（全量推送，不 diff）：
+ *   1. remove 先走：tree.remove 里的 id 先删；
+ *   2. 对根节点：已存在 → handler.update；不存在 → handler.create + 挂 scene。
+ *   缺席的 type 分组不动（不 diff，不自动删除）。
+ * 返回变更 name 列表（供 refreshCards）。
  */
-export const loadModelObjects = async (
-  nodeMap: Map<string, THREE.Object3D>,
-  objects?: LiveDataObject[],
-  onError?: (id: string, message: string) => void,
-): Promise<Map<string, THREE.Object3D>> => {
-  if (!objects) {
-    return new Map();
+export const updateTreeScene = (
+  scene: THREE.Scene,
+  index: ObjectIndex,
+  tree: TreeScene,
+): string[] => {
+  const changed: string[] = [];
+  const nodeIndex = buildNodeIndex(tree);
+  const ctx = buildCtx(scene, index, nodeIndex);
+
+  // 1. remove 先走
+  if (tree.remove?.length) {
+    changed.push(...removeObjects(scene, index, tree.remove));
   }
 
-  const modelDefs = objects.filter((o) => o.src);
-  if (modelDefs.length === 0) {
-    return new Map();
-  }
-
-  const loaded = new Map<string, THREE.Object3D>();
-
-  const tasks = modelDefs.map(async (def) => {
-    const src = def.src!;
-    const placeholder = nodeMap.get(def.id);
-    if (!placeholder) {
-      return;
-    }
-
-    try {
-      const model = await getResourceManager().cloneModel(src, {
-        castShadow: def.castShadow,
-        receiveShadow: def.receiveShadow,
-      });
-
-      placeholder.add(model);
-      delete placeholder.userData.__modelSrc;
-      delete placeholder.userData.__modelId;
-
-      // 注册子节点到 nodeMap(供 parentId 引用)
-      model.traverse((child) => {
-        if (child !== model && child.name) {
-          child.userData.id = `${def.id}_${child.name}`;
-          nodeMap.set(child.userData.id, child);
+  // 2. 对根节点 update/create（不 diff：有数据就走）
+  for (const [, node] of nodeIndex.nodes) {
+    if (node.parentId === null) {
+      const existing = index.get(node.id);
+      if (existing) {
+        componentManager.update(existing, node, ctx, patchObject);
+        changed.push(existing.name || node.id);
+      } else {
+        const obj = componentManager.create(node, ctx);
+        if (obj) {
+          index.set(node.id, obj);
+          scene.add(obj);
+          changed.push(obj.name || node.id);
+        } else {
+          console.warn(`[objects] update 时 create 返回 null，跳过: id=${node.id} type=${node.type}`);
         }
-      });
-
-      loaded.set(def.id, placeholder);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[objects] 模型加载失败: ${src} (${def.id})`, msg);
-      // 回落:占位 Group 内放一个 box 兜底,不阻塞其余物体
-      const fallbackGeo = new THREE.BoxGeometry(1, 1, 1);
-      const fallbackMat = new THREE.MeshStandardMaterial({ color: 0xff4444 });
-      const fallback = new THREE.Mesh(fallbackGeo, fallbackMat);
-      fallback.name = `${def.id}_fallback`;
-      placeholder.add(fallback);
-      delete placeholder.userData.__modelSrc;
-      delete placeholder.userData.__modelId;
-      onError?.(def.id, `模型加载失败 ${src}: ${msg}`);
-      loaded.set(def.id, placeholder);
+      }
     }
-  });
+  }
 
-  await Promise.all(tasks);
-  return loaded;
+  return changed;
 };

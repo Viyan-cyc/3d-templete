@@ -20,10 +20,9 @@ import * as THREE from 'three'
 import {
   createScene3D,
   type Scene3DHandle,
-  type SceneUpdatePatch,
   type CardState,
   type CardComponentRegistry,
-  type LiveDataConfig,
+  type TreeScene,
 } from '@/3d'
 import { CardHost } from '@/adapters/vue'
 import { bindPostMessageHost, postToParent } from '@/3d/bridge/postMessageHost'
@@ -39,6 +38,10 @@ const cardStates = ref<CardState[]>([])
 const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
 let handle: Scene3DHandle | null = null
 let detachBridge: (() => void) | null = null
+// 9a 门控：转发运行时错误给宿主的控制台桥——onMounted 装、onUnmounted 卸，仅 embed 上下文生效
+let originalConsoleError: typeof console.error | null = null
+let onErrorHandler: ((e: ErrorEvent) => void) | null = null
+let onRejectionHandler: ((e: PromiseRejectionEvent) => void) | null = null
 /** 最近一次已渲染的 SCENE_UPDATE payload JSON——用于去重。
  *  octoapp 会在 iframe onLoad 与收到 SCENE_READY 后各发一次相同 payload，
  *  若不去重会触发两个 createScene3D 并发抢占同一 canvas（渲染冲突/白屏）。 */
@@ -85,8 +88,8 @@ function logSceneDebug(h: Scene3DHandle): void {
 }
 
 /** 渲染（或重新渲染）一个完整 SceneConfig；data 为 null 时清空 */
-async function renderScene(data: LiveDataConfig | null) {
-  if (isDebug) console.log('[embed] renderScene 开始, objects=', data?.objects?.length ?? 0)
+async function renderScene(data: TreeScene | null) {
+  if (isDebug) console.log('[embed] renderScene 开始, keys=', data ? Object.keys(data) : [])
   const canvas = canvasRef.value
   if (!canvas) {
     postToParent({ type: 'SCENE_ERROR', message: 'Canvas 不存在' })
@@ -152,13 +155,48 @@ onMounted(() => {
   postToParent({ type: 'SCENE_READY' })
   console.log('[embed] SCENE_READY sent')
 
+  // 9a 门控：转发运行时错误给宿主（SCENE_CONSOLE_ERROR），供宿主确定性门控捕获 + 持久显示（不走消失 toast）。
+  // - window error / unhandledrejection：捕获未处理异常
+  // - console.error 包裹：既保留原行为（devtools 可见），又转发给宿主（含 Three.js 运行时抛错）
+  onErrorHandler = (e: ErrorEvent) => {
+    postToParent({
+      type: 'SCENE_CONSOLE_ERROR',
+      level: 'error',
+      message: e.message || '未知错误',
+      stack: e.error instanceof Error ? e.error.stack : undefined,
+    })
+  }
+  onRejectionHandler = (e: PromiseRejectionEvent) => {
+    const reason = e.reason
+    postToParent({
+      type: 'SCENE_CONSOLE_ERROR',
+      level: 'error',
+      message:
+        'Unhandled rejection: ' + (reason instanceof Error ? reason.message : String(reason)),
+      stack: reason instanceof Error ? reason.stack : undefined,
+    })
+  }
+  window.addEventListener('error', onErrorHandler)
+  window.addEventListener('unhandledrejection', onRejectionHandler)
+  originalConsoleError = console.error.bind(console) as typeof console.error
+  console.error = ((...args: unknown[]) => {
+    originalConsoleError?.(...args)
+    postToParent({
+      type: 'SCENE_CONSOLE_ERROR',
+      level: 'error',
+      message: args
+        .map((a) => (a instanceof Error ? `${a.message}\n${a.stack ?? ''}` : String(a)))
+        .join(' '),
+    })
+  }) as typeof console.error
+
   // 绑定 postMessage 桥
   detachBridge = bindPostMessageHost({
     onScene: async (data) => {
       if (isDebug)
         console.log(
-          '[embed] 收到 SCENE_UPDATE, objects=',
-          (data as { objects?: unknown[] } | null)?.objects?.length ?? 0,
+          '[embed] 收到 SCENE_UPDATE, keys=',
+          data ? Object.keys(data) : [],
         )
       // 去重：onLoad 与 SCENE_READY 重发会带来相同 payload，只渲染一次
       const json = data === null ? 'null' : JSON.stringify(data)
@@ -167,7 +205,7 @@ onMounted(() => {
         return
       }
       lastRenderedJson = json
-      await renderScene(data as LiveDataConfig | null)
+      await renderScene(data as TreeScene | null)
     },
     // 以下阶段3：拾取开关 / 聚焦 / 主题 / 增量补丁
     onPickMode: (enabled) => {
@@ -187,7 +225,7 @@ onMounted(() => {
       handle?.resetCamera?.()
     },
     onPatch: (patch) => {
-      handle?.update(patch as SceneUpdatePatch)
+      handle?.update(patch as TreeScene)
     },
   })
 
@@ -203,7 +241,7 @@ onMounted(() => {
       try {
         const res = await fetch(`/${sceneFile}`)
         if (res.ok) {
-          const data = (await res.json()) as LiveDataConfig
+          const data = (await res.json()) as TreeScene
           await renderScene(data)
         }
       } catch {
@@ -218,6 +256,19 @@ onUnmounted(() => {
   detachBridge = null
   handle?.dispose()
   handle = null
+  // 9a 门控：卸载运行时错误转发（仅 embed 上下文，避免泄漏到独立访问页）
+  if (onErrorHandler) {
+    window.removeEventListener('error', onErrorHandler)
+    onErrorHandler = null
+  }
+  if (onRejectionHandler) {
+    window.removeEventListener('unhandledrejection', onRejectionHandler)
+    onRejectionHandler = null
+  }
+  if (originalConsoleError) {
+    console.error = originalConsoleError
+    originalConsoleError = null
+  }
 })
 </script>
 

@@ -1,44 +1,49 @@
 /**
  * ============================================================
- *  ComponentManager — 业务层组件生命周期分派器
+ *  ComponentManager — 业务层组件生命周期分派器（树原生）
  *
  *  四层链：data → manager → handlers → components
- *    - manager 按优先级遍历「创建 kind 链」，首个 match 且 create 返回非 null 的 handler 胜出；
- *    - handler 薄，调 new XxxComponent(options) 实例化组件（创建逻辑在 components 层）；
- *    - create 成功后统一盖 userData.__id / __componentType。
+ *    - manager 按 type 在「type→handler 注册表」里找 handler，调 handler.create；
+ *    - handler 是厚代码（LLM 写），拥有整棵子树：create 内部通过 ctx.getChildren 查 children 递归建；
+ *    - manager 只对根节点（parentId=null）分发；子节点由父 handler 内部处理；
+ *    - create 成功后统一盖 userData.__id / __componentType / __logicalRoot（根=整体）。
  *
  *  用法：
- *    1. registerCreationChain([...])  注册 kind 链（按优先级，在 createScene3D 初始化时一次）
- *    2. componentManager.create(data, ctx)         创建
- *    3. componentManager.update(obj, data, ctx, patchObject)   更新
- *    4. componentManager.delete(obj, ctx, disposeObject)      删除
+ *    1. registerHandler(type, handler)   注册 type→handler（在 createScene3D 初始化时一次）
+ *    2. componentManager.create(node, ctx)         创建（仅根节点）
+ *    3. componentManager.update(obj, node, ctx, defaultFn)   更新
+ *    4. componentManager.delete(obj, ctx, defaultFn)        删除
  * ============================================================
  */
 
 import type * as THREE from 'three';
-import type { LiveDataObject } from '../../scene/loader';
+import type { TreeNode } from '../../scene/loader';
 import type { ComponentSharedState } from './handlers/base/shared';
+import type { CloneModelOpts } from '../../resources';
 
-/** id → Object3D 索引（物体层 buildObjects/upsertObjects 维护，借 ctx 透传给 handler） */
+/** id → Object3D 索引（objects 层 buildTreeScene 维护，借 ctx 透传给 handler） */
 export type ObjectIndex = Map<string, THREE.Object3D>
 
 // ── 类型定义 ──
 
 /**
- * 单个业务类型的生命周期处理器。
- * 只需实现关心的操作；create 返回 null 表示未处理（回落 kind 链下一项），
- * update/delete 返回 false 表示未处理（回落 defaultFn）。
+ * 单个业务 type 的生命周期处理器（树原生）。
+ * handler 拥有整棵子树：create 读根节点 + ctx.getChildren 递归建子节点；update 全量不 diff；
+ * delete 清理资源（返回 true 跳过默认 dispose，保护共享资源）。
  */
 export interface ComponentHandler {
 
-  /** 创建：返回 Object3D，null 表示未处理（回落 kind 链下一项） */
-  create?: (data: LiveDataObject, ctx: ComponentContext) => THREE.Object3D | null
+  /** 创建：node 是根节点（parentId=null）。返回 Object3D，null 表示未处理。handler 自盖子对象 __id + 注册 index。 */
+  create?: (node: TreeNode, ctx: ComponentContext) => THREE.Object3D | null
 
-  /** 更新：返回 true 表示已处理，false 回落 defaultFn */
-  update?: (obj: THREE.Object3D, data: LiveDataObject, ctx: ComponentContext) => boolean
+  /** 更新：全量数据推过来，不 diff。handler 把 obj 调整到新 node 状态（重建子树或就地改）。返回 true 已处理，false 回落 defaultFn。 */
+  update?: (obj: THREE.Object3D, node: TreeNode, ctx: ComponentContext) => boolean
 
-  /** 删除：返回 true 表示已处理，false 回落 defaultFn */
+  /** 删除：清理资源（取消订阅/卡片）。返回 true 跳过默认 dispose（保护共享资源），false 回落 defaultFn。 */
   delete?: (obj: THREE.Object3D, ctx: ComponentContext) => boolean
+
+  /** 该 type 的数据契约（代码先行后反推，供产品对接 + 绑定 UI） */
+  dataSchema?: object
 }
 
 /** handler 执行上下文 */
@@ -46,94 +51,107 @@ export interface ComponentContext {
   scene: THREE.Scene
   index: ObjectIndex
 
-  /** 跨 handler 共享的状态（颜色映射、材质缓存、自定义 store 等） */
+  /** 跨 handler 共享的状态（resources/interactiveManager/cameraRig/cardManager/source） */
   shared: ComponentSharedState
-}
 
-/** 创建 kind 链的一项：match 命中则交给 handler；handler.create 返回 null 则继续下一项 */
-export interface CreationEntry {
+  /**
+   * 加载模型（便捷，对齐文档 `ctx.loadModel('asset:xxx')`）：等价于 ctx.shared.resources.cloneModel(src, opts)。
+   * handler 二选一——ctx.loadModel（便捷，新 handler 推荐）或 ctx.shared.resources.cloneModel（直接门面，exampleHandler 用）。
+   */
+  loadModel: (src: string, opts?: CloneModelOpts) => Promise<THREE.Object3D>
 
-  /** 类型标识（delete 时按 __componentType 匹配此项） */
-  key: string
+  /** 查某节点的子节点（按 parentId 在当前推送的 nodeMap 里查，带 type） */
+  getChildren(parentId: string): TreeNode[]
 
-  /** 是否能处理该 data（按 data 形状判断） */
-  match: (data: LiveDataObject) => boolean
-  handler: ComponentHandler
+  /** 按 id 查节点 */
+  getNode(id: string): TreeNode | undefined
 }
 
 // ── Manager ──
 
 export class ComponentManager {
-  private _chain: CreationEntry[] = [];
+  private _handlers = new Map<string, ComponentHandler>();
 
-  /** 注册创建 kind 链（按优先级顺序；首项 match 且 create 返回非 null 者胜出） */
-  registerCreationChain(entries: CreationEntry[]): void {
-    this._chain = entries;
+  /** 注册 type → handler（幂等：同 type 覆盖） */
+  registerHandler(type: string, handler: ComponentHandler): void {
+    this._handlers.set(type, handler);
+  }
+
+  /** 批量注册 */
+  registerHandlers(entries: Array<{ type: string; handler: ComponentHandler }>): void {
+    for (const { type, handler } of entries) {
+      this.registerHandler(type, handler);
+    }
+  }
+
+  /** 按 type 取 handler */
+  resolveHandler(type: string): ComponentHandler | undefined {
+    return this._handlers.get(type);
   }
 
   /**
-   * 从 Object3D 的 userData 读取创建时存的 handler key（供 delete 分派使用）。
-   * delete 阶段没有 LiveDataObject，只有 id 列表，因此依赖创建时写入的标记。
+   * 分派创建：按 node.type 找 handler，调 handler.create。
+   * 创建成功后自动盖 userData.__id（node.id）/ __componentType（type）/ __logicalRoot（根=整体）。
+   * 子对象的 __id 由 handler 自盖（manager 不递归）。
    */
-  resolveTypeFromObj(obj: THREE.Object3D): string | null {
-    return (obj.userData.__componentType as string) ?? null;
-  }
-
-  /**
-   * 分派创建：按 kind 链优先级遍历，首个 match 且 create 返回非 null 者胜出（null 则回落下一项）。
-   * 创建成功后自动盖 userData.__id（data.id）与 __componentType（创建它的 chain entry 的 key，
-   * 供 delete 按 key 反查 handler）。
-   */
-  create(data: LiveDataObject, ctx: ComponentContext): THREE.Object3D | null {
-    for (const entry of this._chain) {
-      if (entry.match(data)) {
-        const result = entry.handler.create?.(data, ctx) ?? null;
-        if (result) {
-          if (data.id) {
-            result.userData.__id = data.id;
-          }
-          result.userData.__componentType = entry.key;
-          // 命中的 3d-components 组件名（如 'BaseGroup'/'Grid'），供编辑态拾取回传 component 字段。
-          // data.component?.type 为库组件名；非组件实体（mesh/group）为 ''（picker 据此判断是否回传）。
-          result.userData.__componentName = data.component?.type ?? '';
-          return result;
-        }
-        // handler 返回 null → 继续 kind 链下一项
+  create(node: TreeNode, ctx: ComponentContext): THREE.Object3D | null {
+    const handler = this._handlers.get(node.type);
+    const result = handler?.create?.(node, ctx) ?? null;
+    if (result) {
+      result.userData.__id = node.id;
+      result.userData.__componentType = node.type;
+      // 根节点 = 用户视角的"一个整体"（whole 粒度选中）；handler 建的子对象不盖此戳（=part）
+      result.userData.__logicalRoot = true;
+      // 命中的 3d-components 组件名（handler 用 createComponentObject 时自盖 __componentName）；
+      // 默认 ''（picker 据此判断是否回传 component 字段）
+      if (!result.userData.__componentName) {
+        result.userData.__componentName = '';
       }
+      if (!result.name) {
+        result.name = node.id;
+      }
+      return result;
     }
     return null;
   }
 
   /**
-   * 分派更新：首个 match 的 handler.update 返回 true 则结束，否则回落 defaultFn。
+   * 分派更新：按 node.type 找 handler（回落 obj.__componentType），调 handler.update。
+   * 返回 true 则结束，否则回落 defaultFn（patchObject 就地改 transform）。
    */
   update(
     obj: THREE.Object3D,
-    data: LiveDataObject,
+    node: TreeNode,
     ctx: ComponentContext,
-    defaultFn: (obj: THREE.Object3D, data: LiveDataObject) => void,
+    defaultFn: (obj: THREE.Object3D, node: TreeNode) => void,
   ): void {
-    const entry = this._chain.find((e) => e.match(data));
-    if (entry?.handler.update?.(obj, data, ctx)) {
+    const handler = this._handlers.get(node.type) ?? this.resolveHandlerFromObj(obj);
+    if (handler?.update?.(obj, node, ctx)) {
       return;
     }
-    defaultFn(obj, data);
+    defaultFn(obj, node);
   }
 
   /**
-   * 分派删除：按 __componentType 找 handler，返回 true 则结束，否则回落 defaultFn。
+   * 分派删除：按 __componentType 找 handler，调 handler.delete。
+   * 返回 true 则结束，否则回落 defaultFn（disposeObject）。
    */
   delete(
     obj: THREE.Object3D,
     ctx: ComponentContext,
     defaultFn: (obj: THREE.Object3D) => void,
   ): void {
-    const key = this.resolveTypeFromObj(obj);
-    const entry = key ? this._chain.find((e) => e.key === key) : undefined;
-    if (entry?.handler.delete?.(obj, ctx)) {
+    const handler = this.resolveHandlerFromObj(obj);
+    if (handler?.delete?.(obj, ctx)) {
       return;
     }
     defaultFn(obj);
+  }
+
+  /** 从 Object3D.userData 读 __componentType（delete 时按 type 反查 handler） */
+  resolveHandlerFromObj(obj: THREE.Object3D): ComponentHandler | undefined {
+    const type = obj.userData.__componentType as string | undefined;
+    return type ? this._handlers.get(type) : undefined;
   }
 }
 

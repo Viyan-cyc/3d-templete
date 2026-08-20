@@ -14,7 +14,9 @@
  * ============================================================
  */
 
-import type { LiveDataConfig } from './loader';
+import type {
+  TreeScene, TreeSceneEnv, LiveDataCamera, LiveDataLight,
+} from './loader';
 
 // ══════════════════════════════════════════════════════════════
 // 类型
@@ -25,9 +27,9 @@ export interface ScenePreset {
 
   /** 预设名称（显示/调试用） */
   name: string
-  scene?: NonNullable<LiveDataConfig['scene']>
-  camera?: NonNullable<LiveDataConfig['camera']>
-  lights?: NonNullable<LiveDataConfig['lights']>
+  scene?: TreeSceneEnv
+  camera?: LiveDataCamera
+  lights?: LiveDataLight[]
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -242,11 +244,11 @@ export const getScenePresets = (): Readonly<Record<string, ScenePreset>> => ({ .
  * - 先 spread（用户值覆盖预设）解析出对应子字段，再剔除另一子字段，避免歧义
  */
 const mergeCamera = (
-  cfgCam: NonNullable<LiveDataConfig['camera']>,
-  presetCam: NonNullable<LiveDataConfig['camera']> | undefined,
-): NonNullable<LiveDataConfig['camera']> => {
+  cfgCam: LiveDataCamera,
+  presetCam: LiveDataCamera | undefined,
+): LiveDataCamera => {
   const type = cfgCam.type ?? 'perspective';
-  const merged: NonNullable<LiveDataConfig['camera']> = {
+  const merged: LiveDataCamera = {
     ...presetCam,
     ...cfgCam,
     type,
@@ -270,13 +272,15 @@ const mergeCamera = (
  * - type='perspective' 但没传 perspective 子字段 → 用预设的 perspective 兜底
  * - type='orthographic' 但没传 orthographic 子字段 → 用预设的 orthographic 兜底
  */
-export const mergeWithPreset = (config: LiveDataConfig, presetKey: string): LiveDataConfig => {
+export const mergeWithPreset = (config: TreeScene, presetKey: string): TreeScene => {
   const preset = scenePresets[presetKey] ?? scenePresets.dark;
   const pScene = preset.scene;
   const pCamera = preset.camera;
   const pLights = preset.lights;
 
+  // 透传 config 的所有字段（type 分组 + remove + version + _说明 等），仅合并 scene/camera/lights
   return {
+    ...config,
     version: config.version ?? '1.0',
     scene: config.scene
       ? {
@@ -288,6 +292,5 @@ export const mergeWithPreset = (config: LiveDataConfig, presetKey: string): Live
       : { ...pScene },
     camera: config.camera ? mergeCamera(config.camera, pCamera) : { ...pCamera },
     lights: config.lights ?? pLights,
-    objects: config.objects,
   };
 };

@@ -1,20 +1,59 @@
 /**
- * loader — live-data 场景配置加载 + 类型定义
+ * loader — 树形场景配置加载 + 类型定义
  *
- * 只负责取 JSON 和定义数据结构;环境装配在 environment.ts,物体生命周期在 objects.ts。
+ * 只负责取 JSON 和定义数据结构；环境装配在 environment.ts，物体生命周期在 objects.ts。
+ *
+ * 数据格式（分组扁平 + parentId）：
+ *   顶层 = type 分组字典（key 是 type 名，value 一律是 TreeNode[]）+ 可选环境字段 + remove。
+ *   节点 = { id, params, parentId }（无 type 字段——type = 分组 key；无 children 字段——父子靠 parentId）。
+ *   只有根节点 parentId=null；子节点 parentId 指向父（可跨分组）。
  */
 
-export interface LiveDataConfig {
+/**
+ * 单个树节点（内部展开后）。
+ * raw JSON 节点只有 {id, params, parentId}（无 type——type = 分组 key）；
+ * buildNodeIndex 展开 raw JSON 时把分组 key 作为 type 附上，故内部流转的 TreeNode 带 type。
+ */
+export interface TreeNode {
+
+  /** 节点 type（= 所在分组 key，buildNodeIndex 展开 raw JSON 时附上） */
+  type: string
+
+  /** 节点 id（CRUD 幂等键，写入 userData.__id） */
+  id: string
+
+  /** 实例属性（业务字段 + 可选 position/rotation/scale/castShadow/receiveShadow） */
+  params: Record<string, unknown>
+
+  /** 父节点 id；根节点为 null。handler 通过 ctx.getChildren(id) 查 children 递归建子树 */
+  parentId: string | null
+}
+
+/** 场景环境配置（背景/雾/PMREM） */
+export interface TreeSceneEnv {
+  background?: string
+  environment?: { preset: string; intensity: number }
+  fog?: { type: string; color: string; near: number; far: number }
+  renderStyle?: string
+}
+
+/**
+ * 树形场景：顶层 type 分组字典 + 环境字段 + remove。
+ * - version/scene/camera/lights/remove 是保留 key；
+ * - 其余每个 key 是一个 type 分组（TreeNode[]），type = key 名。
+ * - 索引签名让任意 type 分组都能通过类型检查。
+ */
+export interface TreeScene {
   version?: string
-  scene?: {
-    background?: string
-    environment?: { preset: string; intensity: number }
-    fog?: { type: string; color: string; near: number; far: number }
-    renderStyle?: string
-  }
+  scene?: TreeSceneEnv
   camera?: LiveDataCamera
   lights?: LiveDataLight[]
-  objects?: LiveDataObject[]
+
+  /** 按 id 删除（update 时先于分组处理） */
+  remove?: string[]
+
+  /** type 分组：key=type 名，value=该 type 的节点数组。单个实例也包一层数组 */
+  [type: string]: unknown
 }
 
 export interface LiveDataCamera {
@@ -55,46 +94,6 @@ export interface LiveDataLight {
       bottom: number
     }
   }
-}
-
-export interface LiveDataObject {
-  id: string
-  type: 'group' | 'mesh' | 'component' | 'glb' | 'model'
-  parentId: string | null
-  position?: number[]
-  rotation?: number[]
-  scale?: number[]
-  geometry?: LiveDataGeometry
-  material?: LiveDataMaterial
-  component?: LiveDataComponent
-
-  // 模型资源引用（type==='glb'/'model'，或 resolver 链中 component 未命中时回落用）。
-  //  - 'asset:example' → 本地 modelRegistry（Vite ?url）+ GLTFLoader
-  //  - 'http(s)://...' → 远程 + 按扩展名选 loader
-  //  - 'hunyuan:风力发电机' → 混元单次生成缓存（占位 throw，回落 mesh）
-  //
-  src?: string
-  castShadow?: boolean
-  receiveShadow?: boolean
-
-  // 分区容器标记（由宿主 octoapp mergeSceneObjects 据 planner.slots 注入）。
-  //  zone 身份权威来源，支持嵌套分区；无标记时下方标记逻辑回落到「root 直接子=zone」启发式。
-  // eslint-disable-next-line @typescript-eslint/naming-convention -- 宿主注入的 JSON 契约字段，不可改名
-  __zone?: boolean
-}
-
-export interface LiveDataComponent {
-
-  /**
-   * 组件标识，统一用 type：
-   *  - 库组件：3d-components 类名（Grid/Wall/HeatMesh…），libraryBridge 注册则走 libraryHandler（优先级最高）
-   *  - 本仓组件：builder type（example 等），走对应垂域 handler（exampleHandler…）
-   *  creationChain 按优先级匹配，命中库注册表走库，否则查 type 链
-   */
-  type?: string
-
-  /** 组件参数（library 组件时透传给库构造器当 options；builder 时给 handler）。统一用 params，支持复杂结构（path/walls 等） */
-  params?: Record<string, unknown>
 }
 
 export interface LiveDataGeometry {
@@ -139,10 +138,10 @@ const resolveFetchUrl = (fetchParam: string | null, defaultFile: string): string
   return /^https?:\/\//.test(fetchParam) ? fetchParam : `/${fetchParam}`;
 };
 
-// 从 URL 加载 live-data 场景配置。
+// 从 URL 加载树形场景配置。
 //  URL 参数 `?fetch=<file>` 指定场景文件（与 pattern 实时预览协议一致）；
 //  无参数时回落到 defaultFile（默认 live-data.json）。
-export const loadLiveDataConfig = async (defaultFile = 'live-data.json'): Promise<LiveDataConfig> => {
+export const loadLiveDataConfig = async (defaultFile = 'live-data.json'): Promise<TreeScene> => {
   const params = new URLSearchParams(window.location.search);
   const fetchParam = params.get('fetch');
   const url = resolveFetchUrl(fetchParam, defaultFile);

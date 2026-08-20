@@ -1,0 +1,23 @@
+{
+  "_说明": "Step 5 混元 + 兜底验证场景：分组扁平契约（model 分组，src/position 在 params 内）。加载 ?fetch=test-hunyuan.json。ex-1 走 asset:example（example.glb）；hy-1/hy-2 走 hunyuan:（真实 GLB 或 low-poly 兜底）。",
+  "version": "1.0",
+  "scene": {
+    "background": "#1a1a2e",
+    "environment": { "intensity": 0.8 }
+  },
+  "camera": {
+    "type": "perspective",
+    "position": [8, 5, 12],
+    "lookAt": [0, 0.5, 0],
+    "perspective": { "fov": 50, "near": 0.1, "far": 1000 }
+  },
+  "lights": [
+    { "type": "ambient", "intensity": 0.5 },
+    { "type": "directional", "intensity": 1.2, "position": [8, 12, 6], "castShadow": true }
+  ],
+  "model": [
+    { "id": "ex-1", "parentId": null, "params": { "src": "asset:example", "position": [3, 0, 0], "castShadow": true } },
+    { "id": "hy-1", "parentId": null, "params": { "src": "hunyuan:风力发电机", "position": [-3, 0, 0] } },
+    { "id": "hy-2", "parentId": null, "params": { "src": "hunyuan:松树", "position": [-5, 0, 0] } }
+  ]
+}

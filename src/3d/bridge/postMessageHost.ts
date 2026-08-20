@@ -16,7 +16,8 @@
  *  embed → 宿主（子→父）：
  *    SCENE_READY    —                                  握手（onMounted 立即发，父收到重发 pendingData）
  *    SCENE_PICK     { id, name, component, props }     选中回传（阶段3）
- *    SCENE_ERROR    { message }                        解析/加载错误
+ *    SCENE_ERROR    { message }                        解析/加载错误（fatal：场景构建抛错）
+ *    SCENE_CONSOLE_ERROR { level, message, stack? }    运行时 console.error / window error / unhandledrejection（9a 门控捕获）
  *
  *  阶段0：只实现 SCENE_UPDATE 分发 + 发 SCENE_READY/SCENE_ERROR。
  *  其余消息留空分支，阶段3 补 ScenePicker / 增量 / 主题后填充。
@@ -47,6 +48,7 @@ export type SceneEmbedMessage =
   | { type: 'SCENE_READY' }
   | { type: 'SCENE_PICK'; id: string; name?: string; component?: string; props?: unknown }
   | { type: 'SCENE_ERROR'; message: string }
+  | { type: 'SCENE_CONSOLE_ERROR'; level: 'error' | 'warn'; message: string; stack?: string }
 
 /** 宿主消息的回调集合 */
 export interface PostMessageHostHandlers {

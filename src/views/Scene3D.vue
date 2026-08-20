@@ -19,10 +19,8 @@ import type { Component } from 'vue'
 import {
   createScene3D,
   loadLiveDataConfig,
-  toUpdatePatch,
-  isUpdatePatch,
   type Scene3DHandle,
-  type SceneUpdatePatch,
+  type TreeScene,
   type CardState,
   type CardComponentRegistry,
 } from '@/3d'
@@ -74,14 +72,11 @@ onMounted(async () => {
     statusText.value = ''
 
     // 便于在控制台手动验证增量更新（demo 用，可删）：
-    //   scene3d.update({ objects: { remove: ['tree01_trunk'] } })
-    //   scene3d.update({ objects: { upsert: [{ id:'marker01', parentId:'sceneRoot', type:'mesh',
-    //     geometry:{type:'sphere',params:{radius:1}}, material:{type:'standard',color:'#ff0'},
-    //     position:[0,5,0] }] } })
+    //   scene3d.update({ remove: ['wave'] })
+    //   scene3d.update({ buildings: [{ id:'building', params:{}, parentId:null }] })
     ;(window as unknown as { scene3d?: Scene3DHandle }).scene3d = handle
 
-    // 示例：定时更新 —— 按固定间隔请求模拟数据，按格式自动分派：
-    //   帧表 / 增量 patch → handle.update；全量产品数据（mock-tree-update.json 那种）→ toUpdatePatch 转换后 handle.update。
+    // 示例：定时更新 —— 按固定间隔请求模拟数据（分组扁平 TreeScene，含可选 remove），直接 handle.update。
     //   仅 ?update= 时启动，默认场景不受影响。
     // 下载模板接入自己的数据时，把这里的 url 换成你的轮询接口、去掉 ?update 判断即可。
     //   ?update=1          启动定时更新，用默认 live-data-handlers-update.json
@@ -98,11 +93,7 @@ onMounted(async () => {
         url: `/${updateUrl}`,
         intervalMs: Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : undefined,
         onPatch: (data) => {
-          if (isUpdatePatch(data)) {
-            handle?.update(data as SceneUpdatePatch)
-          } else {
-            handle?.update(toUpdatePatch(data), data)
-          }
+          handle?.update(data as TreeScene, data as TreeScene)
         },
         onError: (err) => console.warn('[Scene3D] 定时更新轮询失败:', err),
       })

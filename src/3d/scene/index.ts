@@ -2,60 +2,52 @@
  * scene — 场景层入口
  *
  * 一次性建场景 = 环境(environment) + 物体(objects):
- *   applyLiveDataToApp = mergeWithPreset → applyEnvironment → buildObjects
+ *   applyLiveDataToApp = mergeWithPreset → applyEnvironment → buildTreeScene
  *
  * - environment.ts  场景环境(非物体):背景/雾/相机/灯光/PMREM
- * - objects.ts       物体生命周期:create/mount/update/delete/dispose + 模型异步填充
- * - loader.ts        live-data 配置加载 + 类型定义
+ * - objects.ts       物体生命周期:buildTreeScene/updateTreeScene/removeObjects
+ * - loader.ts        树形场景配置加载 + 类型定义(TreeScene/TreeNode)
+ * - utils.ts         toVec/toPath/disposeObject/clearIndexSubtree
  */
 import type { App3D } from '../App3D';
-import type { LiveDataConfig, ApplyLiveDataOptions } from './loader';
+import type { TreeScene, ApplyLiveDataOptions } from './loader';
 import { mergeWithPreset } from './presets';
 import { applyEnvironment } from './environment';
-import { buildObjects, type ObjectIndex } from './objects';
+import { buildTreeScene, type ObjectIndex } from './objects';
 
 export { loadLiveDataConfig } from './loader';
 export type {
-  LiveDataConfig,
+  TreeScene,
+  TreeNode,
+  TreeSceneEnv,
   LiveDataCamera,
   LiveDataLight,
-  LiveDataObject,
-  LiveDataComponent,
   LiveDataGeometry,
   LiveDataMaterial,
   ApplyLiveDataOptions,
 } from './loader';
-export {
-  buildObjects, upsertObjects, removeObjects, loadModelObjects,
-} from './objects';
+export { buildTreeScene, updateTreeScene, removeObjects } from './objects';
 export type { ObjectIndex } from './objects';
-export { registerScenePreset, getScenePresets } from './presets';
+export {
+  toVec, toPath, disposeObject, clearIndexSubtree,
+} from './utils';
+export { registerScenePreset, getScenePresets, mergeWithPreset } from './presets';
 export type { ScenePreset } from './presets';
 
-// ---- 产品数据归一化适配层 ----
-export {
-  registerAdapters, normalizeConfig, normalizeToModel, resolveAdapter,
-  registerTypeMappings, resolveTypeMapping, clearTypeMappings,
-  toVec, toPath, isEntityNode, toUpdatePatch, isUpdatePatch,
-} from './adapters';
-export type {
-  SceneModel, Adapter, AdapterEntry, TypeMapping, TypeRegistry, EntityNode,
-} from './adapters';
-
 /**
- * 将 live-data 场景配置应用到已有的 App3D 实例(一次性建场景)。
+ * 将树形场景配置应用到已有的 App3D 实例(一次性建场景)。
  *
- * 编排:合并预设 → 应用环境(背景/雾/相机/灯光/PMREM)→ 全量建物体。
+ * 编排:合并预设(scene/camera/lights 兜底，type 分组透传)→ 应用环境 → 全量建物体。
  *
- * @returns 所有 live-data 对象的 id → Object3D 索引(供增量更新使用)
+ * @returns 所有根实体的 id → Object3D 索引(供增量更新使用)
  */
 export const applyLiveDataToApp = (
   app: App3D,
-  config: LiveDataConfig,
+  tree: TreeScene,
   options: ApplyLiveDataOptions,
 ): ObjectIndex => {
   const { viewSize, preset: presetKey = 'dark' } = options;
-  const merged = mergeWithPreset(config, presetKey);
+  const merged = mergeWithPreset(tree, presetKey);
   applyEnvironment(app, merged, viewSize, options.keepExisting);
-  return buildObjects(app.scene, merged.objects ?? []);
+  return buildTreeScene(app.scene, merged);
 };

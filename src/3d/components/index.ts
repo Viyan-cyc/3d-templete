@@ -4,7 +4,7 @@
  * 结构（三种组件来源都在此）：
  *   base/              本地通用底座（工具 + 通用组件 Primitive/Text/Model，无业务属性）
  *   exampleField/      本地垂域组件（源码：示例，如 example）
- *   libraryBridge.ts  npm 组件桥（@cyc/3d-components 的 Wall/Grid/HeatMesh… 按名引入）
+ *   libraryBridge.ts  npm 组件桥（@a3d/a3d-components 的 Wall/Grid/HeatMesh… 按名引入）
  *   AssetPool.ts       Geometry/Material 缓存
  *
  * 所有内置类组件由 handler 直接 new；npm 组件走 createComponentObject；无需注册表。

@@ -14,3 +14,7 @@ export type { ResourceManager, CloneModelOpts, HunyuanGenerator } from './Resour
 export { registerModels } from './registerModels';
 export { registerMaterials } from './registerMaterials';
 export { liveMaterialToConfig, createMaterialFromConfig } from './createMaterial';
+
+// 资源库 manifest + 检索（assets-library/，跟工程走）
+export { ASSET_MANIFEST, searchAssetEntries } from '../../../assets-library/manifest';
+export type { AssetEntry, AssetSearchResult } from '../../../assets-library/manifest';

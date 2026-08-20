@@ -1,23 +1,21 @@
 /**
  * registerModels — 模式B 静态资源注册（模型 + 贴图）
  *
- * 静态资源（key → url，Vite ?url 编译带 hash）在此注册；数据 / handler 里用
- *   src='asset:example'  或  ctx.shared.resources.cloneModel('example')
- *   ctx.shared.resources.loadTexture(key)
+ * 模型来自资源库 manifest（assets-library/manifest.ts 的 ASSET_MANIFEST）：
+ * 遍历条目批量 registerModel(id, src) + setAssetManifest（供 searchAssets 检索）。
+ * 数据 / handler 里用
+ *   src='asset:example'  或  ctx.loadModel('asset:example')           // 便捷（对齐文档 API）
+ *                          ctx.shared.resources.cloneModel('asset:example')  // 直接门面
+ *   ctx.shared.resources.loadTexture(key)                              // 贴图
  * 引用。混元（按需生成）走 setHunyuanGenerator，src='hunyuan:prompt' 触发。
  *
- * 新增静态资源：把 .glb/.gltf 放到 src/3d/assets/models/、贴图放到 src/3d/assets/textures/，
- * import '?url'，分别加进 modelRegistry / textureRegistry。
+ * 新增静态模型：把 .glb/.gltf 放到 assets-library/models/，在 manifest.ts 里
+ * `import xxxUrl from './models/xxx.glb?url'` + 加一条 ASSET_MANIFEST 条目即可（本文件无需改）。
+ * 新增静态贴图：把图放到 src/3d/assets/textures/，import '?url'，加进下方 textureRegistry。
  */
-import exampleUrl from '../assets/models/example.glb?url';
+import { ASSET_MANIFEST } from '../../../assets-library/manifest';
 import { getResourceManager } from './ResourceManager';
-
-/** 模型注册表：key → 资源 URL（静态文件，Vite 编译后带 hash）。 */
-const modelRegistry: Record<string, string> = {
-  example: exampleUrl,
-  // car: '/model/car.glb',
-  // person: '/model/person.gltf',
-};
+import { hunyuanGenerator } from './hunyuan';
 
 /**
  * 贴图注册表：key → 资源 URL。组件用 loadTexture(key) 取独立贴图。
@@ -25,23 +23,13 @@ const modelRegistry: Record<string, string> = {
  */
 const textureRegistry: Record<string, string> = {};
 
-/**
- * 混元生成器（占位：未接入，抛错回落 mesh 兜底，与旧 hunyuan.ts 行为一致）。
- * 后续接入：实现真实混元调用，返回 { bytes } 或 { src }。
- */
-const hunyuanGenerator = async (prompt: string): Promise<{ bytes?: ArrayBuffer; src?: string }> => {
-  // TODO: 接入真实混元 API
-  //   const res = await fetch('https://hunyuan.../generate', { body: JSON.stringify({ prompt }) })
-  //   return { bytes: await res.arrayBuffer() }
-  console.warn(`[resources] 混元未接入（占位），prompt="${prompt}"，将回落 mesh 兜底`);
-  throw new Error('HUNYUAN_NOT_IMPLEMENTED');
-};
-
-/** 注册所有静态模型 + 贴图 + 混元生成器（幂等）。在 createScene3D step0 调用。 */
+/** 注册所有静态模型（manifest 驱动）+ 贴图 + 混元生成器（幂等）。在 createScene3D step0 调用。 */
 export const registerModels = (): void => {
   const r = getResourceManager();
-  for (const [key, url] of Object.entries(modelRegistry)) {
-    r.registerModel(key, url);
+  // manifest 驱动批量注册模型 + 注入 manifest 供 searchAssets 检索
+  r.setAssetManifest(ASSET_MANIFEST);
+  for (const entry of ASSET_MANIFEST) {
+    r.registerModel(entry.id, entry.src);
   }
   for (const [key, url] of Object.entries(textureRegistry)) {
     r.registerTexture(key, url);

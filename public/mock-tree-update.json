@@ -1,46 +1,42 @@
 {
-  "_说明": "产品嵌套数据示例：buildings/floors/walls/door/ceiling/roads/water/fishes/wave，覆盖数组→数组/数组→对象/对象→数组/对象→对象四种嵌套。加载方式 ?scene=mock-tree.json",
+  "_说明": "update 测试②（全量重建子树）：FLOOR1 height 3→5；wave 重新在（无 remove，验证全量推送会把 update1 删掉的 wave 建回来）。?update=mock-tree-update.json",
   "buildings": [
+    { "id": "building", "params": {}, "parentId": null }
+  ],
+  "floors": [
+    { "id": "FLOOR1", "params": { "height": 5 }, "parentId": "building" }
+  ],
+  "walls": [
     {
-      "id": "building",
-      "floors": [
-        {
-          "id": "FLOOR1",
-          "height": 5,
-          "walls": [
-            {
-              "id": "wall1",
-              "path": [{"x":0,"y":0,"z":0}, {"x":5,"y":0,"z":0}, {"x":5,"y":0,"z":4}, {"x":0,"y":0,"z":4}],
-              "position": {"x":0,"y":0,"z":0},
-              "info": {}
-            }
-          ],
-          "door": {
-            "id": "door1",
-            "style": 1,
-            "direction": {"x":1,"y":0,"z":0}
-          }
-        }
-      ],
-      "ceiling": {
-        "id": "ceiling1",
-        "position": [0, 3, 0],
-        "rotation": [0, 0, 0],
-        "scale": [1, 1, 1],
-        "segment": 23
-      }
+      "id": "wall1",
+      "params": {
+        "path": [{"x":0,"y":0,"z":0}, {"x":5,"y":0,"z":0}, {"x":5,"y":0,"z":4}, {"x":0,"y":0,"z":4}],
+        "position": {"x":0,"y":0,"z":0},
+        "info": {}
+      },
+      "parentId": "FLOOR1"
     }
   ],
-  "roads": [
-    {"id": "road1", "path": [{"x":6,"y":0,"z":0}, {"x":10,"y":0,"z":0}], "arrow": 1},
-    {"id": "road2", "path": [{"x":6,"y":0,"z":2}, {"x":10,"y":0,"z":2}], "arrow": 3}
+  "door": [
+    { "id": "door1", "params": { "style": 1, "direction": {"x":1,"y":0,"z":0} }, "parentId": "FLOOR1" }
   ],
-  "water": {
-    "id": "water",
-    "style": 111,
-    "fishes": [
-      {"id": "fishe1", "type": 11, "position": {"x":8,"y":0,"z":5}, "other": 123}
-    ]
-  },
-  "remove": ["wave"]
+  "ceiling": [
+    { "id": "ceiling1", "params": { "position": [0,3,0], "rotation": [0,0,0], "scale": [1,1,1], "segment": 23 }, "parentId": "building" }
+  ],
+  "roads": [
+    { "id": "road1", "params": { "path": [{"x":6,"y":0,"z":0}, {"x":10,"y":0,"z":0}], "arrow": 1 }, "parentId": null },
+    { "id": "road2", "params": { "path": [{"x":6,"y":0,"z":2}, {"x":10,"y":0,"z":2}], "arrow": 3 }, "parentId": null }
+  ],
+  "water": [
+    { "id": "water", "params": { "style": 111 }, "parentId": null }
+  ],
+  "fishes": [
+    { "id": "fishe1", "params": { "type": 11, "position": {"x":8,"y":0,"z":5}, "other": 123 }, "parentId": "water" }
+  ],
+  "wave": [
+    { "id": "wave", "params": { "range": 1, "position": {"x":8,"y":0,"z":5} }, "parentId": "water" }
+  ],
+  "example": [
+    { "id": "ex1", "params": { "position": [0,0,8], "rotation": [0,0,0], "scale": [1,1,1] }, "parentId": null }
+  ]
 }

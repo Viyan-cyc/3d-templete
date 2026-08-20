@@ -1,41 +1,37 @@
 /**
  * handlers — 业务 handler 统一注册入口
  *
- * 注册「创建 kind 链」：data → manager 按 kind 链优先级分派到 handler → handler 调
- * new XxxComponent 实例化组件。新增类型只需：1) 写组件类；2) 写 handler；3) 在链里加一项。
+ * 注册「type → handler」表：data 的每个顶层 type 分组对应一个 handler。
+ * manager 只对根节点（parentId=null）按 type 分发；handler 拥有整棵子树，通过
+ * ctx.getChildren 递归建子节点。新增类型只需：1) 写 handler；2) 在此 registerHandler。
  */
-import { componentManager, type CreationEntry } from '../ComponentManager';
+import { componentManager, type ComponentHandler } from '../ComponentManager';
 import { sharedState } from './base/shared';
-import { registerAllComponents, hasComponent } from '../../../components';
-import { libraryHandler } from './base/library';
+import { registerAllComponents } from '../../../components';
+import { buildingsHandler } from './buildings/buildings';
+import { roadsHandler } from './roads/roads';
+import { waterHandler } from './water/water';
 import { exampleHandler } from './exampleField/example';
-import { modelHandler } from './base/model';
-import { primitiveHandler } from './base/primitive';
-import { groupHandler } from './base/group';
+import { modelHandler } from './model/model';
 
 export { sharedState, ComponentSharedState } from './base/shared';
 
 /**
- * 创建 kind 链（按优先级）：
- *   library(3d-components) > example(内置示例) > model(src) > primitive(geometry) > group
- * match 命中且 create 返回非 null 者胜出；返回 null 则回落下一项。
+ * type → handler 注册表（按 type 名匹配分组 key）。
+ * 每个顶层 type 一个 handler；未注册的 type 分组会被 manager 跳过并 warn。
  */
-const creationChain: CreationEntry[] = [
-  {
-    key: 'library',
-    match: (d) => hasComponent(d.component?.type ?? ''),
-    handler: libraryHandler,
-  },
-  { key: 'example', match: (d) => d.component?.type === 'example', handler: exampleHandler },
-  { key: 'model', match: (d) => Boolean(d.src), handler: modelHandler },
-  { key: 'primitive', match: (d) => Boolean(d.geometry) || d.type === 'mesh', handler: primitiveHandler },
-  { key: 'group', match: (d) => d.type === 'group', handler: groupHandler },
+const typeHandlers: Array<{ type: string; handler: ComponentHandler }> = [
+  { type: 'buildings', handler: buildingsHandler },
+  { type: 'roads', handler: roadsHandler },
+  { type: 'water', handler: waterHandler },
+  { type: 'example', handler: exampleHandler },
+  { type: 'model', handler: modelHandler },
 ];
 
 /** 注册所有业务 handler + 组件底层注册表（在 createScene3D 初始化时调用一次，幂等） */
 export const registerComponentHandlers = (): void => {
   registerAllComponents();
-  componentManager.registerCreationChain(creationChain);
+  componentManager.registerHandlers(typeHandlers);
 };
 
 /** 释放共享状态（在场景 dispose 时调用） */

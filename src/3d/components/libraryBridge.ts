@@ -1,6 +1,6 @@
 /**
  * ============================================================
- *  libraryBridge.ts — 把 @cyc/3d-components 的静态导出包成 type→Ctor 映射
+ *  libraryBridge.ts — 把 @a3d/a3d-components 的静态导出包成 type→Ctor 映射
  *
  *  3d-components 组件是 Three.js Object3D 子类（class），通过 `new Component(options)` 构造，
  *  options 是对象（继承 ComponentOptions）。本 bridge 维护 type→Ctor 映射，供 JSON 解析器
@@ -10,14 +10,14 @@
  *  Material 子类（ShinyMaterial/MeshReflectorMaterial）不是 Object3D，此处不处理（留 TODO）。
  *
  *  引用方式（dev）：vite.config.ts alias 直指 ../3d-components/src。
- *  生产阶段改 npm install @cyc/3d-components 后移除 alias。
+ *  生产阶段改 npm install @a3d/a3d-components 后移除 alias。
  * ============================================================
  */
 
 import * as THREE from 'three';
-import * as Core from '@cyc/3d-components/core';
-import * as Heat from '@cyc/3d-components/heat';
-import * as Material from '@cyc/3d-components/material';
+import * as Core from '@a3d/a3d-components/core';
+import * as Heat from '@a3d/a3d-components/heat';
+import * as Material from '@a3d/a3d-components/material';
 
 /** 组件构造器类型：new (options?) => THREE.Object3D */
 type ComponentCtor = new (options?: Record<string, unknown>) => THREE.Object3D
@@ -85,6 +85,16 @@ export const resolveComponent = (name: string): ComponentCtor | undefined => {
  * IUpdatable 处理：组件若有 update(delta) 方法（如 HeatMesh），在 userData.__updatable 标记，
  * 供 createScene3D 收集到 App3D 渲染循环每帧调用。
  */
+/**
+ * 构造器为位置参数（非单 options 契约）的组件 → 从 options 取字段按位置传。
+ * 多数 a3d 组件是 new Component(options) 单参数；但下表组件签名不同（如 InstancedMesh2 是
+ * (geometry, material, params)），若用 Reflect.construct(ctor, [options]) 会把整个 options
+ * 当 geometry 传、material 位置落空 → "material is mandatory"。新组件按需加。
+ */
+const POSITIONAL_CTORS = new Map<string, (o: Record<string, unknown>) => unknown[]>([
+  ['InstancedMesh2', (o) => [o.geometry, o.material, o]],
+]);
+
 export const createComponentObject = (
   name: string,
   options?: Record<string, unknown>,
@@ -93,9 +103,13 @@ export const createComponentObject = (
   if (!ctor) {
     return null;
   }
+  const opts = options ?? {};
 
   try {
-    const obj = Reflect.construct(ctor, [options]);
+    const adapt = POSITIONAL_CTORS.get(name);
+    const obj = adapt
+      ? Reflect.construct(ctor, adapt(opts))
+      : Reflect.construct(ctor, [opts]);
     // 标记 IUpdatable（有 update 方法且是 function）
     if (typeof (obj as { update?: unknown }).update === 'function') {
       obj.userData.__updatable = true;
