@@ -752,7 +752,7 @@ onUnmounted(() => poller.stop())
 | 消息类型 | 字段 | 用途 |
 |----------|------|---------|
 | `SCENE_UPDATE` | `payload: LiveDataConfig \| null` | 替换/清空整个场景数据 |
-| `SCENE_PATCH` | `payload: SceneUpdatePatch` | 增量更新物体（upsert/remove） |
+| `SCENE_EDIT_OBJECT` | `{ id, material?, transform? }` | 运行时直改 Object3D 材质/transform（即时生效，不落盘 live-data） |
 | `SCENE_PICK_MODE` | `enabled: boolean` | 开启/关闭拾取模式 |
 | `SCENE_PICK_GRANULARITY` | `granularity: 'part' \| 'whole'` | 切换拾取粒度 |
 | `SCENE_FLY_TO` | `targetId: string` | 飞到指定物体 |
@@ -764,8 +764,9 @@ onUnmounted(() => poller.stop())
 | 消息类型 | 数据 | 用途 |
 |----------|------|------|
 | `SCENE_READY` | 无 | 场景就绪握手（加载后立即发，宿主收到后重发 pendingData） |
-| `SCENE_PICK` | `{ id, name?, component?, props? }` | 用户选中了一个物体 |
+| `SCENE_PICK` | `{ id, name?, component?, props?, isMesh?, material? }` | 用户选中了一个物体（含 mesh 标记 + 材质快照） |
 | `SCENE_ERROR` | `{ message: string }` | 场景出错 |
+| `SCENE_CONSOLE_ERROR` | `{ level, message, stack? }` | 运行时错误转发（9a 门控捕获 + 持久显示） |
 
 ### 8.4 代码示例
 

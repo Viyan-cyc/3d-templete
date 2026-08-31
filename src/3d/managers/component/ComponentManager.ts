@@ -92,7 +92,7 @@ export class ComponentManager {
   /**
    * 分派创建：按 node.type 找 handler，调 handler.create。
    * 创建成功后自动盖 userData.__id（node.id）/ __componentType（type）/ __logicalRoot（根=整体）。
-   * 子对象的 __id 由 handler 自盖（manager 不递归）。
+   * 子对象的 __id 由 handler 自盖；handler 漏盖的由 stampMissingIds 兜底补（保证 part 粒度可拾取）。
    */
   create(node: TreeNode, ctx: ComponentContext): THREE.Object3D | null {
     const handler = this._handlers.get(node.type);
@@ -110,9 +110,35 @@ export class ComponentManager {
       if (!result.name) {
         result.name = node.id;
       }
+      // 兜底盖戳：handler 可能漏盖子对象 __id（循环同质子物体尤甚）→ part 粒度 picker 沿父子链
+      // 找不到子 __id 回落父 group → 只能整体选。遍历子树给「无 __id」后代自动盖 __id（不盖
+      // __logicalRoot，子=part），引擎层保证「每个物体可拾取」+ 正确区分局部/整体，不依赖 LLM 合规。
+      this.stampMissingIds(result, node.id, node.type);
       return result;
     }
     return null;
+  }
+
+  /**
+   * 兜底盖戳：遍历 root 子树，给所有没有 __id 的后代自动盖 __id + __componentType。
+   * 不盖 __logicalRoot（仅根有，子=part）。handler 已盖的 __id（含 `${id}-${子类型}-${i}` 命名）不覆盖。
+   * 目的：part 粒度 picker 需子对象有 __id 才能选得中单个，否则回落父 group（整体）。
+   */
+  private stampMissingIds(root: THREE.Object3D, rootId: string, rootType: string): void {
+    let i = 0;
+    root.traverse((child) => {
+      if (child === root) {
+        return;
+      }
+      // handler 已盖 __id → 不覆盖（保留语义化命名）
+      if (typeof child.userData.__id === 'string' && child.userData.__id !== '') {
+        return;
+      }
+      child.userData.__id = `${rootId}-part-${i++}`;
+      if (!child.userData.__componentType) {
+        child.userData.__componentType = rootType;
+      }
+    });
   }
 
   /**

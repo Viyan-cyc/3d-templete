@@ -11,11 +11,11 @@
  *    SCENE_FLY_TO   { targetId: string }              聚焦物体（阶段3）
  *    SCENE_THEME    { mode: 'light'|'dark' }          切主题（阶段3）
  *    SCENE_RESET_CAMERA —                              复位相机到初始视角
- *    SCENE_PATCH    { objects: {...} }                增量更新（阶段3）
+ *    SCENE_EDIT_OBJECT { id, material?, transform? }  直改运行时 Object3D 材质/transform（子 mesh 不在 data 层，即时生效）
  *
  *  embed → 宿主（子→父）：
  *    SCENE_READY    —                                  握手（onMounted 立即发，父收到重发 pendingData）
- *    SCENE_PICK     { id, name, component, props }     选中回传（阶段3）
+ *    SCENE_PICK     { id, name, component, props, isMesh, material, transform }  选中回传（含 transform 弧度快照）
  *    SCENE_ERROR    { message }                        解析/加载错误（fatal：场景构建抛错）
  *    SCENE_CONSOLE_ERROR { level, message, stack? }    运行时 console.error / window error / unhandledrejection（9a 门控捕获）
  *
@@ -23,6 +23,15 @@
  *  其余消息留空分支，阶段3 补 ScenePicker / 增量 / 主题后填充。
  * ============================================================
  */
+
+import type { MaterialSnapshot } from '../interaction/SelectionService';
+
+/** SCENE_EDIT_OBJECT 的 transform 载荷（三轴数组，沿用 SceneConfig 约定：position/rotation/scale） */
+export interface SceneEditTransform {
+  position?: number[];
+  rotation?: number[];
+  scale?: number[];
+}
 
 /** 宿主→embed 的消息载荷类型（阶段0 仅 SCENE_UPDATE 有实质处理） */
 export interface SceneHostMessage {
@@ -33,7 +42,7 @@ export interface SceneHostMessage {
     | 'SCENE_FLY_TO'
     | 'SCENE_THEME'
     | 'SCENE_RESET_CAMERA'
-    | 'SCENE_PATCH'
+    | 'SCENE_EDIT_OBJECT'
   payload?: unknown
   enabled?: boolean
   targetId?: string
@@ -41,12 +50,21 @@ export interface SceneHostMessage {
 
   /** SCENE_PICK_GRANULARITY 的选中粒度：'part'(部件) | 'whole'(整体) */
   granularity?: 'part' | 'whole'
+
+  /** SCENE_EDIT_OBJECT：目标 Object3D 的 __id（沿父子链盖戳） */
+  id?: string
+
+  /** SCENE_EDIT_OBJECT：材质覆盖（仅 mesh 生效） */
+  material?: MaterialSnapshot
+
+  /** SCENE_EDIT_OBJECT：transform 覆盖 */
+  transform?: SceneEditTransform
 }
 
 /** embed→宿主的消息载荷 */
 export type SceneEmbedMessage =
   | { type: 'SCENE_READY' }
-  | { type: 'SCENE_PICK'; id: string; name?: string; component?: string; props?: unknown }
+  | { type: 'SCENE_PICK'; id: string; name?: string; component?: string; props?: unknown; isMesh?: boolean; material?: MaterialSnapshot; transform?: SceneEditTransform }
   | { type: 'SCENE_ERROR'; message: string }
   | { type: 'SCENE_CONSOLE_ERROR'; level: 'error' | 'warn'; message: string; stack?: string }
 
@@ -64,7 +82,9 @@ export interface PostMessageHostHandlers {
   onFlyTo?: (targetId: string) => void
   onTheme?: (mode: 'light' | 'dark') => void
   onResetCamera?: () => void
-  onPatch?: (patch: unknown) => void
+
+  /** SCENE_EDIT_OBJECT：按 __id 直改运行时 Object3D 的材质/transform（子 mesh 不在 data 层，走此即时通路） */
+  onEditObject?: (payload: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
 }
 
 /** 向宿主发送一条 embed→父 消息 */
@@ -117,8 +137,10 @@ export const bindPostMessageHost = (handlers: PostMessageHostHandlers): () => vo
         case 'SCENE_RESET_CAMERA':
           handlers.onResetCamera?.();
           break;
-        case 'SCENE_PATCH':
-          handlers.onPatch?.(data.payload);
+        case 'SCENE_EDIT_OBJECT':
+          if (data.id) {
+            handlers.onEditObject?.({ id: data.id, material: data.material, transform: data.transform });
+          }
           break;
         default:
           // 未知消息类型，忽略

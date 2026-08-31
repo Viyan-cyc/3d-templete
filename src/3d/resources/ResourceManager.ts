@@ -26,7 +26,7 @@ import {
 } from '@a3d/a3d-components/material';
 import { createMaterialFromConfig, liveMaterialToConfig } from './createMaterial';
 import type { LiveDataMaterial } from '../scene/loader';
-import { searchAssetEntries, type AssetEntry, type AssetSearchResult } from '../../../assets-library/manifest';
+import { searchAssetEntries, type AssetEntry, type AssetSearchResult } from '../../../assetsLibrary/manifest';
 
 /** 模型克隆选项（阴影 + 克隆粒度），透传 AssetCache.cloneModel。 */
 export interface CloneModelOpts {

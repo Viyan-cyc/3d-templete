@@ -34,10 +34,12 @@ import {
   type ObjectIndex,
   type TreeScene,
 } from './scene';
-import { SelectionService } from './interaction/SelectionService';
+import { SelectionService, type MaterialSnapshot } from './interaction/SelectionService';
 import { SelectionVisuals } from './interaction/SelectionVisuals';
+import type { SceneEditTransform } from './bridge/postMessageHost';
 import { CameraRig } from './interaction/CameraRig';
 import { InteractiveManager } from '@a3d/a3d-components/interactive';
+import { applySyncProps, type MaterialConfig } from '@a3d/a3d-components/material';
 import { registerComponentHandlers, disposeComponentHandlers } from './managers';
 import { sharedState } from './managers/component/handlers/base/shared';
 import { registerModels, registerMaterials, getResourceManager } from './resources';
@@ -124,6 +126,12 @@ export interface Scene3DHandle {
   /** 复位相机到初始视角（SCENE_RESET_CAMERA / 编程式调用） */
   resetCamera: () => void
 
+  /**
+   * 按 __id 直改运行时 Object3D 的材质/transform（SCENE_EDIT_OBJECT）。
+   * 用于编辑态选中的子 mesh（不在 data 层、数据层增量更新够不到）——即时生效，不落盘 live-data。
+   */
+  editObject?: (p: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
+
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
@@ -186,6 +194,38 @@ const setupSelection = (app: App3D, interactiveManager: InteractiveManager): Sel
   return selection;
 };
 
+/** mesh 材质持有侧像（仅取 material + 数组守卫；属性写入复用 3d-components applySyncProps） */
+interface EditMeshLike {
+  material?: unknown;
+}
+
+/** 按 userData.__id 在场景树里查 Object3D（编辑态运行时直改用；index 只含根节点，子 mesh 靠遍历） */
+const findByUserId = (root: THREE.Object3D, id: string): THREE.Object3D | null => {
+  let found: THREE.Object3D | null = null;
+  root.traverse((o) => {
+    if (!found && o.userData?.__id === id) {
+      found = o;
+    }
+  });
+  return found;
+};
+
+/**
+ * 把材质覆盖应用到 mesh（非 mesh / 多材质跳过）。
+ * 写入复用 3d-components applySyncProps（duck-type 守卫 + needsUpdate），避免手写属性表与工厂分叉。
+ * `as unknown as Parameters<...>[0]` 规避双 @types/three（3d-templete vs 3d-components）冲突。
+ */
+const applyMaterial = (obj: THREE.Object3D, m: MaterialSnapshot): void => {
+  const raw = (obj as unknown as EditMeshLike).material;
+  if (!raw || Array.isArray(raw)) {
+    return;
+  }
+  applySyncProps(
+    raw as unknown as Parameters<typeof applySyncProps>[0],
+    m as unknown as MaterialConfig,
+  );
+};
+
 /** 组装对外 handle（update / dispose 等方法闭包） */
 const createHandle = (params: {
   app: App3D
@@ -231,6 +271,27 @@ const createHandle = (params: {
     flyTo: (targetId: string) => cameraRig.flyTo(targetId),
     setTheme: (mode: 'light' | 'dark') => cameraRig.setTheme(mode),
     resetCamera: () => cameraRig.resetCamera(),
+    editObject: (p) => {
+      const obj = findByUserId(app.scene, p.id);
+      if (!obj) {
+        return;
+      }
+      if (p.transform) {
+        const t = p.transform;
+        if (t.position) {
+          obj.position.set(t.position[0] ?? 0, t.position[1] ?? 0, t.position[2] ?? 0);
+        }
+        if (t.rotation) {
+          obj.rotation.set(t.rotation[0] ?? 0, t.rotation[1] ?? 0, t.rotation[2] ?? 0);
+        }
+        if (t.scale) {
+          obj.scale.set(t.scale[0] ?? 1, t.scale[1] ?? 1, t.scale[2] ?? 1);
+        }
+      }
+      if (p.material) {
+        applyMaterial(obj, p.material);
+      }
+    },
     dispose(): void {
       if (disposed) {
         return;

@@ -1,7 +1,7 @@
 /**
  * registerModels — 模式B 静态资源注册（模型 + 贴图）
  *
- * 模型来自资源库 manifest（assets-library/manifest.ts 的 ASSET_MANIFEST）：
+ * 模型来自资源库 manifest（assetsLibrary/manifest.ts 的 ASSET_MANIFEST）：
  * 遍历条目批量 registerModel(id, src) + setAssetManifest（供 searchAssets 检索）。
  * 数据 / handler 里用
  *   src='asset:example'  或  ctx.loadModel('asset:example')           // 便捷（对齐文档 API）
@@ -9,11 +9,11 @@
  *   ctx.shared.resources.loadTexture(key)                              // 贴图
  * 引用。混元（按需生成）走 setHunyuanGenerator，src='hunyuan:prompt' 触发。
  *
- * 新增静态模型：把 .glb/.gltf 放到 assets-library/models/，在 manifest.ts 里
+ * 新增静态模型：把 .glb/.gltf 放到 assetsLibrary/models/，在 manifest.ts 里
  * `import xxxUrl from './models/xxx.glb?url'` + 加一条 ASSET_MANIFEST 条目即可（本文件无需改）。
  * 新增静态贴图：把图放到 src/3d/assets/textures/，import '?url'，加进下方 textureRegistry。
  */
-import { ASSET_MANIFEST } from '../../../assets-library/manifest';
+import { ASSET_MANIFEST } from '../../../assetsLibrary/manifest';
 import { getResourceManager } from './ResourceManager';
 import { hunyuanGenerator } from './hunyuan';
 

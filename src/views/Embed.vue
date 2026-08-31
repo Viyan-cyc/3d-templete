@@ -131,6 +131,9 @@ async function renderScene(data: TreeScene | null) {
           name: info.name,
           component: info.component,
           props: info.props,
+          isMesh: info.isMesh,
+          material: info.material,
+          transform: info.transform,
         })
       }
     }
@@ -207,7 +210,7 @@ onMounted(() => {
       lastRenderedJson = json
       await renderScene(data as TreeScene | null)
     },
-    // 以下阶段3：拾取开关 / 聚焦 / 主题 / 增量补丁
+    // 以下阶段3：拾取开关 / 聚焦 / 主题 / 编辑直改
     onPickMode: (enabled) => {
       if (!handle?.selection) return
       enabled ? handle.selection.enable() : handle.selection.disable()
@@ -224,8 +227,8 @@ onMounted(() => {
     onResetCamera: () => {
       handle?.resetCamera?.()
     },
-    onPatch: (patch) => {
-      handle?.update(patch as TreeScene)
+    onEditObject: (p) => {
+      handle?.editObject?.(p)
     },
   })
 

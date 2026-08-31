@@ -1039,7 +1039,7 @@ onUnmounted(() => poller.stop())
 | 消息类型 | 字段 | 用途 |
 |----------|------|------|
 | `SCENE_UPDATE` | `payload: LiveDataConfig \| null` | 推送/清空整个场景 JSON |
-| `SCENE_PATCH` | `payload: SceneUpdatePatch` | 增量更新物体 |
+| `SCENE_EDIT_OBJECT` | `{ id, material?, transform? }` | 运行时直改 Object3D 材质/transform（即时生效，不落盘 live-data） |
 | `SCENE_PICK_MODE` | `enabled: boolean` | 开/关编辑态选中 |
 | `SCENE_PICK_GRANULARITY` | `granularity: 'part' \| 'whole'` | 选中粒度 |
 | `SCENE_FLY_TO` | `targetId: string` | 聚焦物体 |
@@ -1051,8 +1051,9 @@ onUnmounted(() => poller.stop())
 | 消息类型 | 数据 | 用途 |
 |----------|------|------|
 | `SCENE_READY` | — | 握手（onMounted 立即发，父收到重发 pendingData） |
-| `SCENE_PICK` | `{ id, name?, component?, props? }` | 选中回传 |
+| `SCENE_PICK` | `{ id, name?, component?, props?, isMesh?, material? }` | 选中回传（含 mesh 标记 + 材质快照） |
 | `SCENE_ERROR` | `{ message }` | 解析/加载错误 |
+| `SCENE_CONSOLE_ERROR` | `{ level, message, stack? }` | 运行时错误转发（9a 门控捕获 + 持久显示） |
 
 ### 14.3 扩展协议
 

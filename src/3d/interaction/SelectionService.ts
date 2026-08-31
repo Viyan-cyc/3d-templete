@@ -38,7 +38,167 @@ export interface PickInfo {
 
   /** 备用透传字段（当前未填） */
   props?: Record<string, unknown>;
+
+  /** 命中是否为 mesh（有单 material）——宿主据此弹材质编辑器 */
+  isMesh?: boolean;
+
+  /** mesh 材质快照（全可编辑字段 + 归一 type），供宿主属性弹窗按类型回显 */
+  material?: MaterialSnapshot;
+
+  /** 物体当前 transform 快照（position/rotation/scale）；rotation 弧度（Three 原生），宿主转度显示 */
+  transform?: { position?: number[]; rotation?: number[]; scale?: number[] };
 }
+
+/**
+ * 材质可编辑字段快照（序列化后 postMessage 给宿主回显；全 plain JSON 类型，跨 postMessage 安全）。
+ * color/emissive/specular/sheenColor 为 `#rrggbb` string；side/blending 为 number；标量/bool 原样。
+ * `type` 为归一 key（运行时 THREE 类名→standard/basic/physical/phong/lambert/toon/points；未知材质 undefined）。
+ */
+export interface MaterialSnapshot {
+  type?: string;
+  color?: string;
+  emissive?: string;
+  emissiveIntensity?: number;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  transparent?: boolean;
+  side?: number;
+  depthTest?: boolean;
+  depthWrite?: boolean;
+  blending?: number;
+  fog?: boolean;
+  toneMapped?: boolean;
+  wireframe?: boolean;
+  flatShading?: boolean;
+  specular?: string;
+  shininess?: number;
+  sheen?: number;
+  sheenColor?: string;
+  sheenRoughness?: number;
+  transmission?: number;
+  ior?: number;
+  thickness?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  iridescence?: number;
+  iridescenceIOR?: number;
+  anisotropy?: number;
+  anisotropyRotation?: number;
+  size?: number;
+  sizeAttenuation?: boolean;
+}
+
+/**
+ * 运行时 THREE 材质类名 → 归一 key（呈现层映射：决定宿主弹窗显哪组控件）。
+ * 仅覆盖可编辑材质；Line/ShaderMaterial 等不在表内 → undefined → 弹窗回落 COMMON-only。
+ * 非创建类型（toon/points 仅编辑不创建），故不进 3d-components 的 MaterialType（5 类）。
+ */
+const MATERIAL_TYPE_KEY: Record<string, string> = {
+  MeshStandardMaterial: 'standard',
+  MeshBasicMaterial: 'basic',
+  MeshPhysicalMaterial: 'physical',
+  MeshPhongMaterial: 'phong',
+  MeshLambertMaterial: 'lambert',
+  MeshToonMaterial: 'toon',
+  PointsMaterial: 'points',
+};
+
+/** mesh 材质侧像（duck-type，避免 three 类型耦合 + 双 @types/three 冲突） */
+interface MaterialLike {
+  type?: string;
+  color?: { set?: (v: string) => void; getHexString?: () => string };
+  emissive?: { set?: (v: string) => void; getHexString?: () => string };
+  specular?: { set?: (v: string) => void; getHexString?: () => string };
+  sheenColor?: { set?: (v: string) => void; getHexString?: () => string };
+  emissiveIntensity?: number;
+  roughness?: number;
+  metalness?: number;
+  opacity?: number;
+  transparent?: boolean;
+  side?: number;
+  depthTest?: boolean;
+  depthWrite?: boolean;
+  blending?: number;
+  fog?: boolean;
+  toneMapped?: boolean;
+  wireframe?: boolean;
+  flatShading?: boolean;
+  shininess?: number;
+  sheen?: number;
+  sheenRoughness?: number;
+  transmission?: number;
+  ior?: number;
+  thickness?: number;
+  clearcoat?: number;
+  clearcoatRoughness?: number;
+  iridescence?: number;
+  iridescenceIOR?: number;
+  anisotropy?: number;
+  anisotropyRotation?: number;
+  size?: number;
+  sizeAttenuation?: boolean;
+  needsUpdate?: boolean;
+}
+interface MeshLike {
+  material?: MaterialLike | MaterialLike[];
+}
+
+/**
+ * 取 mesh 的可编辑材质快照（全字段：颜色→#rrggbb + 标量/布尔/枚举直读 + 归一 type）。
+ * 非 mesh（group 无 material）或多材质（数组）返回 undefined → 宿主不弹材质编辑器。
+ */
+const snapshotMaterial = (obj: THREE.Object3D): MaterialSnapshot | undefined => {
+  const mat = (obj as unknown as MeshLike).material;
+  if (!mat || Array.isArray(mat)) {
+    return undefined;
+  }
+  const m = mat as unknown as Record<string, unknown>;
+  const out: MaterialSnapshot = {};
+  const dst = out as unknown as Record<string, unknown>;
+
+  // 归一类型 key（运行时 THREE 类名→standard/.../points；未知材质 undefined）
+  if (typeof m.type === 'string') {
+    out.type = MATERIAL_TYPE_KEY[m.type];
+  }
+
+  // 颜色字段 → #rrggbb（Color 对象的 getHexString）
+  const colorOf = (v: unknown): string | undefined => {
+    if (v && typeof v === 'object' && typeof (v as { getHexString?: () => string }).getHexString === 'function') {
+      return `#${ (v as { getHexString: () => string }).getHexString()}`;
+    }
+    return undefined;
+  };
+  for (const k of ['color', 'emissive', 'specular', 'sheenColor'] as const) {
+    const hex = colorOf(m[k]);
+    if (hex) {
+      dst[k] = hex;
+    }
+  }
+
+  // 标量(number) 与枚举(number，如 side/blending)
+  for (const k of [
+    'emissiveIntensity', 'roughness', 'metalness', 'opacity', 'side', 'blending',
+    'shininess', 'sheen', 'sheenRoughness', 'transmission', 'ior', 'thickness',
+    'clearcoat', 'clearcoatRoughness', 'iridescence', 'iridescenceIOR',
+    'anisotropy', 'anisotropyRotation', 'size',
+  ] as const) {
+    if (typeof m[k] === 'number') {
+      dst[k] = m[k];
+    }
+  }
+  // 布尔
+  for (const k of [
+    'transparent', 'depthTest', 'depthWrite', 'fog', 'toneMapped',
+    'wireframe', 'flatShading', 'sizeAttenuation',
+  ] as const) {
+    if (typeof m[k] === 'boolean') {
+      dst[k] = m[k];
+    }
+  }
+
+  return out;
+};
 
 /**
  * 选中粒度：
@@ -207,6 +367,7 @@ export class SelectionService {
   /** 高亮 + 回调的统一出口（part/whole 两模式共用） */
   private emitPick(obj: THREE.Object3D, id: string): void {
     this.visuals.highlight(obj);
+    const material = snapshotMaterial(obj);
     const info: PickInfo = {
       id,
       name: obj.name || id,
@@ -214,6 +375,13 @@ export class SelectionService {
         typeof obj.userData?.__componentName === 'string' && obj.userData.__componentName !== ''
           ? obj.userData.__componentName
           : undefined,
+      isMesh: material !== undefined,
+      material,
+      transform: {
+        position: obj.position.toArray(),
+        rotation: [obj.rotation.x, obj.rotation.y, obj.rotation.z],
+        scale: obj.scale.toArray(),
+      },
     };
     this.onPick?.(info);
   }
