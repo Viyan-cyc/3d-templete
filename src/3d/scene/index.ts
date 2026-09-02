@@ -15,6 +15,9 @@ import { mergeWithPreset } from './presets';
 import { applyEnvironment } from './environment';
 import { buildTreeScene, type ObjectIndex } from './objects';
 
+export { updateEnvironment } from './environment';
+export type { EnvUpdate } from './environment';
+
 export { loadLiveDataConfig } from './loader';
 export type {
   TreeScene,

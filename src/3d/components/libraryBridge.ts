@@ -50,6 +50,16 @@ const registerNamespace = (mod: Record<string, unknown>, domain: string): void =
   }
 };
 
+/**
+ * 构造器为位置参数（非单 options 契约）的组件 → 从 options 取字段按位置传。
+ * 多数 a3d 组件是 new Component(options) 单参数；但下表组件签名不同（如 InstancedMesh2 是
+ * (geometry, material, params)），若用 Reflect.construct(ctor, [options]) 会把整个 options
+ * 当 geometry 传、material 位置落空 → "material is mandatory"。新组件按需加。
+ */
+const POSITIONAL_CTORS = new Map<string, (o: Record<string, unknown>) => unknown[]>([
+  ['InstancedMesh2', (o) => [o.geometry, o.material, o]],
+]);
+
 /** 初始化：注册 core/heat/material 三个域。幂等。 */
 export const initLibraryBridge = (): void => {
   if (initialized) {
@@ -59,6 +69,14 @@ export const initLibraryBridge = (): void => {
   registerNamespace(Heat, 'heat');
   registerNamespace(Material, 'material');
   initialized = true;
+  // 自检：构造器元数 >1（位置参数签名）但无 POSITIONAL_CTORS 适配 → 启动即点名，
+  // 避免按单 options 构造错参、静默回落原生 THREE。新组件忘适配时这里第一时间暴露。
+  const unadapted = Array.from(registry.entries())
+    .filter(([name, ctor]) => ctor.length > 1 && !POSITIONAL_CTORS.has(name))
+    .map(([name]) => name);
+  if (unadapted.length > 0) {
+    console.warn(`[libraryBridge] 构造器为位置参数但缺 POSITIONAL_CTORS 适配（按单 options 构造会错参）：${unadapted.join(', ')}——请在 libraryBridge.ts 的 POSITIONAL_CTORS 补映射`);
+  }
   console.log(`[libraryBridge] 已注册 ${registry.size} 个 3d-components 组件:`, Array.from(registry.keys()));
 };
 
@@ -85,16 +103,6 @@ export const resolveComponent = (name: string): ComponentCtor | undefined => {
  * IUpdatable 处理：组件若有 update(delta) 方法（如 HeatMesh），在 userData.__updatable 标记，
  * 供 createScene3D 收集到 App3D 渲染循环每帧调用。
  */
-/**
- * 构造器为位置参数（非单 options 契约）的组件 → 从 options 取字段按位置传。
- * 多数 a3d 组件是 new Component(options) 单参数；但下表组件签名不同（如 InstancedMesh2 是
- * (geometry, material, params)），若用 Reflect.construct(ctor, [options]) 会把整个 options
- * 当 geometry 传、material 位置落空 → "material is mandatory"。新组件按需加。
- */
-const POSITIONAL_CTORS = new Map<string, (o: Record<string, unknown>) => unknown[]>([
-  ['InstancedMesh2', (o) => [o.geometry, o.material, o]],
-]);
-
 export const createComponentObject = (
   name: string,
   options?: Record<string, unknown>,

@@ -31,8 +31,10 @@ import {
   applyLiveDataToApp,
   mergeWithPreset,
   updateTreeScene,
+  updateEnvironment,
   type ObjectIndex,
   type TreeScene,
+  type EnvUpdate,
 } from './scene';
 import { SelectionService, type MaterialSnapshot } from './interaction/SelectionService';
 import { SelectionVisuals } from './interaction/SelectionVisuals';
@@ -125,6 +127,9 @@ export interface Scene3DHandle {
 
   /** 复位相机到初始视角（SCENE_RESET_CAMERA / 编程式调用） */
   resetCamera: () => void
+
+  /** 场景级增量更新（SCENE_PATCH_ENV）：只 mutate camera/lights/scene.background·fog 不重建物体树（M-3 ①） */
+  updateEnvironment: (env: EnvUpdate) => void
 
   /**
    * 按 __id 直改运行时 Object3D 的材质/transform（SCENE_EDIT_OBJECT）。
@@ -271,6 +276,11 @@ const createHandle = (params: {
     flyTo: (targetId: string) => cameraRig.flyTo(targetId),
     setTheme: (mode: 'light' | 'dark') => cameraRig.setTheme(mode),
     resetCamera: () => cameraRig.resetCamera(),
+    updateEnvironment: (env) => {
+      const width = app.canvas.clientWidth || 1;
+      const height = app.canvas.clientHeight || 1;
+      updateEnvironment(app, env, { width, height });
+    },
     editObject: (p) => {
       const obj = findByUserId(app.scene, p.id);
       if (!obj) {

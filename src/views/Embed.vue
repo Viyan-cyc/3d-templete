@@ -230,6 +230,10 @@ onMounted(() => {
     onEditObject: (p) => {
       handle?.editObject?.(p)
     },
+    // SCENE_PATCH_ENV（M-3 ①）：场景级增量更新——mutate 灯光/相机/背景·雾，不 dispose 物体树（区别于 renderScene 全量重建）
+    onPatchEnv: (env) => {
+      handle?.updateEnvironment?.(env)
+    },
   })
 
   // 兜底：独立访问 /embed（非 iframe）时，等一会若没收到 SCENE_UPDATE，

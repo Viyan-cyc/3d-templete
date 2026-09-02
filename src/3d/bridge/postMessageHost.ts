@@ -12,6 +12,7 @@
  *    SCENE_THEME    { mode: 'light'|'dark' }          切主题（阶段3）
  *    SCENE_RESET_CAMERA —                              复位相机到初始视角
  *    SCENE_EDIT_OBJECT { id, material?, transform? }  直改运行时 Object3D 材质/transform（子 mesh 不在 data 层，即时生效）
+ *    SCENE_PATCH_ENV { camera?, lights?, scene? }     场景级增量更新：mutate 灯光/相机/背景·雾，不重建物体树（M-3 ①）
  *
  *  embed → 宿主（子→父）：
  *    SCENE_READY    —                                  握手（onMounted 立即发，父收到重发 pendingData）
@@ -25,6 +26,7 @@
  */
 
 import type { MaterialSnapshot } from '../interaction/SelectionService';
+import type { EnvUpdate } from '../scene';
 
 /** SCENE_EDIT_OBJECT 的 transform 载荷（三轴数组，沿用 SceneConfig 约定：position/rotation/scale） */
 export interface SceneEditTransform {
@@ -43,6 +45,7 @@ export interface SceneHostMessage {
     | 'SCENE_THEME'
     | 'SCENE_RESET_CAMERA'
     | 'SCENE_EDIT_OBJECT'
+    | 'SCENE_PATCH_ENV'
   payload?: unknown
   enabled?: boolean
   targetId?: string
@@ -59,6 +62,11 @@ export interface SceneHostMessage {
 
   /** SCENE_EDIT_OBJECT：transform 覆盖 */
   transform?: SceneEditTransform
+
+  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— camera/lights/scene 保留键，运行时 mutate 不重建物体树 */
+  camera?: EnvUpdate['camera']
+  lights?: EnvUpdate['lights']
+  scene?: EnvUpdate['scene']
 }
 
 /** embed→宿主的消息载荷 */
@@ -85,6 +93,9 @@ export interface PostMessageHostHandlers {
 
   /** SCENE_EDIT_OBJECT：按 __id 直改运行时 Object3D 的材质/transform（子 mesh 不在 data 层，走此即时通路） */
   onEditObject?: (payload: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
+
+  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— mutate camera/lights/scene.background·fog，不 dispose 物体树 */
+  onPatchEnv?: (env: EnvUpdate) => void
 }
 
 /** 向宿主发送一条 embed→父 消息 */
@@ -141,6 +152,9 @@ export const bindPostMessageHost = (handlers: PostMessageHostHandlers): () => vo
           if (data.id) {
             handlers.onEditObject?.({ id: data.id, material: data.material, transform: data.transform });
           }
+          break;
+        case 'SCENE_PATCH_ENV':
+          handlers.onPatchEnv?.({ camera: data.camera, lights: data.lights, scene: data.scene });
           break;
         default:
           // 未知消息类型，忽略
