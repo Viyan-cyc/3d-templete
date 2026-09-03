@@ -13,6 +13,42 @@
   </head>
   <body>
     <div id="app"></div>
+    <script>
+      // 早于 module import 装好错误转发：vite transform error 发生在 import 链
+      // （Embed.vue onMounted 的监听器还没装），不在此兜底则宿主门控 15s 超时报「场景未就绪」
+      // 而非真因（parse error）。
+      window.addEventListener('error', function (e) {
+        parent.postMessage({
+          type: 'SCENE_CONSOLE_ERROR',
+          level: 'error',
+          message: e.message || '未知错误',
+          stack: e.error instanceof Error ? e.error.stack : undefined,
+        }, '*');
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        var reason = e.reason;
+        parent.postMessage({
+          type: 'SCENE_CONSOLE_ERROR',
+          level: 'error',
+          message: 'Unhandled rejection: ' + (reason instanceof Error ? reason.message : String(reason)),
+          stack: reason instanceof Error ? reason.stack : undefined,
+        }, '*');
+      });
+      (function () {
+        var orig = console.error.bind(console);
+        console.error = function () {
+          var args = Array.prototype.slice.call(arguments);
+          orig.apply(console, args);
+          parent.postMessage({
+            type: 'SCENE_CONSOLE_ERROR',
+            level: 'error',
+            message: args.map(function (a) {
+              return a instanceof Error ? a.message + '\n' + (a.stack || '') : String(a);
+            }).join(' '),
+          }, '*');
+        };
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
