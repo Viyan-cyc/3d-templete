@@ -102,7 +102,7 @@ export class ComponentManager {
       result.userData.__componentType = node.type;
       // 根节点 = 用户视角的"一个整体"（whole 粒度选中）；handler 建的子对象不盖此戳（=part）
       result.userData.__logicalRoot = true;
-      // 命中的 3d-components 组件名（handler 用 createComponentObject 时自盖 __componentName）；
+      // 命中的 3d-components 组件名（handler 直接 new 库组件时自盖 __componentName）；
       // 默认 ''（picker 据此判断是否回传 component 字段）
       if (!result.userData.__componentName) {
         result.userData.__componentName = '';

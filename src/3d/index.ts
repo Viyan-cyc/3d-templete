@@ -65,11 +65,6 @@ export {
   toVec, toPath, disposeObject, clearIndexSubtree,
 } from './scene';
 
-// ---- 3d-components 桥（resolver 链最高优先级，阶段1 起）----
-export {
-  hasComponent, resolveComponent, createComponentObject, initLibraryBridge,
-} from './components';
-
 // ---- 资源门面（模型 + 材质，统一 AssetCache / MaterialManager）----
 export { getResourceManager, registerModels, registerMaterials } from './resources';
 export type { ResourceManager, CloneModelOpts, HunyuanGenerator } from './resources';

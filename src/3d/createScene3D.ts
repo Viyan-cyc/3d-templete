@@ -154,11 +154,11 @@ const readDebugFromURL = (): boolean => {
   return val === 'true' || val === '1';
 };
 
-/** 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update），注册到渲染循环 */
+/** 收集 IUpdatable 组件（有 update(delta) 方法的 Object3D，如 HeatMap），注册到渲染循环 */
 const setupUpdatables = (app: App3D): void => {
   const updatables: THREE.Object3D[] = [];
   app.scene.traverse((obj) => {
-    if (obj.userData?.__updatable) {
+    if (typeof (obj as { update?: unknown }).update === 'function') {
       updatables.push(obj);
     }
   });

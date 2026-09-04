@@ -4,7 +4,7 @@
  * 厚代码示例：handler 拥有整棵子树，通过 ctx.getChildren 递归建子节点。
  *   - building：Group 容器
  *   - floor：楼板（BoxGeometry，height 来自 params）+ 递归建其 children（walls/door）
- *   - wall：优先库组件 Wall（createComponentObject），未命中回落原生 THREE 沿 path 建墙段
+ *   - wall：优先库组件 Wall（直接 new），构造失败回落原生 THREE 沿 path 建墙段
  *   - door：原生 Box
  *   - ceiling：原生 Box（position 来自 params）
  *
@@ -16,7 +16,7 @@ import type { TreeNode } from '../../../../scene/loader';
 import {
   toVec, toPath, disposeObject, clearIndexSubtree,
 } from '../../../../scene/utils';
-import { createComponentObject } from '../../../../components';
+import { Wall } from '../../../../components';
 
 /** 楼板：薄板 + 高度偏移（height 来自 params，默认 3） */
 const buildFloor = (node: TreeNode): THREE.Object3D => {
@@ -32,41 +32,41 @@ const buildFloor = (node: TreeNode): THREE.Object3D => {
   return g;
 };
 
-/** 墙：优先库 Wall，未命中回落原生 THREE 沿 path 建墙段 */
+/** 墙：优先库 Wall（直接 new），构造失败回落原生 THREE 沿 path 建墙段 */
 const buildWall = (node: TreeNode): THREE.Object3D => {
   const path = toPath(node.params.path);
   const pos = toVec(node.params.position);
 
-  // 尝试库组件 Wall（3d-components）
-  const lib = createComponentObject('Wall', { path });
-  if (lib) {
+  // 直接 new 库组件 Wall（3d-components，barrel import）
+  try {
+    const lib = new Wall({ path });
     if (pos) {
       lib.position.set(...pos);
     }
     lib.userData.__componentName = 'Wall';
     return lib;
-  }
-
-  // 回落：沿 path 建 Box 墙段
-  const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.7 });
-  for (let i = 0; i < path.length - 1; i++) {
-    const [x1, , z1] = path[i];
-    const [x2, , z2] = path[i + 1];
-    const len = Math.hypot(x2 - x1, z2 - z1);
-    if (len >= 1e-4) {
-      const seg = new THREE.Mesh(new THREE.BoxGeometry(len, 2.5, 0.15), mat);
-      seg.position.set((x1 + x2) / 2, 1.25, (z1 + z2) / 2);
-      seg.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-      seg.castShadow = true;
-      seg.receiveShadow = true;
-      g.add(seg);
+  } catch {
+    // 回落：沿 path 建 Box 墙段
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.7 });
+    for (let i = 0; i < path.length - 1; i++) {
+      const [x1, , z1] = path[i];
+      const [x2, , z2] = path[i + 1];
+      const len = Math.hypot(x2 - x1, z2 - z1);
+      if (len >= 1e-4) {
+        const seg = new THREE.Mesh(new THREE.BoxGeometry(len, 2.5, 0.15), mat);
+        seg.position.set((x1 + x2) / 2, 1.25, (z1 + z2) / 2);
+        seg.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
+        seg.castShadow = true;
+        seg.receiveShadow = true;
+        g.add(seg);
+      }
     }
+    if (pos) {
+      g.position.set(...pos);
+    }
+    return g;
   }
-  if (pos) {
-    g.position.set(...pos);
-  }
-  return g;
 };
 
 /** 门：原生 Box（style/direction 预留，暂不消费） */

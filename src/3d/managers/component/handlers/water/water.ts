@@ -9,7 +9,7 @@
  * update 全量不 diff：水面（shell）保留，仅清旧 fish/wave 子节点后按新 children 重建。
  * delete 连子树一起 dispose。
  *
- * 生产可替换为库组件：createComponentObject('Water', params) + 动画/shader，契约不变。
+ * 生产可替换为库组件：import { Water } from '...components' + new Water(params) + 动画/shader，契约不变。
  */
 import * as THREE from 'three';
 import type { ComponentHandler, ComponentContext } from '../../ComponentManager';

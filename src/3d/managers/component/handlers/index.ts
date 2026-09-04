@@ -7,7 +7,6 @@
  */
 import { componentManager, type ComponentHandler } from '../ComponentManager';
 import { sharedState } from './base/shared';
-import { registerAllComponents } from '../../../components';
 import { buildingsHandler } from './buildings/buildings';
 import { roadsHandler } from './roads/roads';
 import { waterHandler } from './water/water';
@@ -28,9 +27,8 @@ const typeHandlers: Array<{ type: string; handler: ComponentHandler }> = [
   { type: 'model', handler: modelHandler },
 ];
 
-/** 注册所有业务 handler + 组件底层注册表（在 createScene3D 初始化时调用一次，幂等） */
+/** 注册所有业务 handler（在 createScene3D 初始化时调用一次，幂等） */
 export const registerComponentHandlers = (): void => {
-  registerAllComponents();
   componentManager.registerHandlers(typeHandlers);
 };
 
