@@ -234,6 +234,10 @@ onMounted(() => {
     onPatchEnv: (env) => {
       handle?.updateEnvironment?.(env)
     },
+    // SCENE_REMOVE_OBJECT：即时从场景树移除 Object3D（运行时，不碰 data 层；持久化由宿主侧 editDelta.deleted → patchHandlerSkip 改源码）
+    onRemoveObject: (id) => {
+      handle?.removeObject?.(id)
+    },
   })
 
   // 兜底：独立访问 /embed（非 iframe）时，等一会若没收到 SCENE_UPDATE，

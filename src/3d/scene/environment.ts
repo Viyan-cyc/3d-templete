@@ -133,7 +133,10 @@ const mutateLight = (light: THREE.Light, cfg: LiveDataLight): void => {
     light.position.set(...pos);
   }
   if (cfg.castShadow !== undefined && 'castShadow' in light) {
-    (light as THREE.DirectionalLight).castShadow = cfg.castShadow;
+    // 仅 directional 能投射阴影；ambient/hemisphere 无阴影，误置会触发
+    // WebGLShadowMap「HemisphereLight has no shadow」警告。
+    (light as THREE.DirectionalLight).castShadow =
+      cfg.castShadow && (light as THREE.DirectionalLight).isDirectionalLight;
   }
   const target = parseVec3(cfg.target);
   if (target && 'target' in light) {

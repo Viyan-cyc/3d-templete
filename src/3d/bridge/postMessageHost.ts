@@ -13,6 +13,7 @@
  *    SCENE_RESET_CAMERA —                              复位相机到初始视角
  *    SCENE_EDIT_OBJECT { id, material?, transform? }  直改运行时 Object3D 材质/transform（子 mesh 不在 data 层，即时生效）
  *    SCENE_PATCH_ENV { camera?, lights?, scene? }     场景级增量更新：mutate 灯光/相机/背景·雾，不重建物体树（M-3 ①）
+ *    SCENE_REMOVE_OBJECT { id }                       即时从场景树移除 Object3D（parent.remove + dispose，不碰 data 层）
  *
  *  embed → 宿主（子→父）：
  *    SCENE_READY    —                                  握手（onMounted 立即发，父收到重发 pendingData）
@@ -46,6 +47,7 @@ export interface SceneHostMessage {
     | 'SCENE_RESET_CAMERA'
     | 'SCENE_EDIT_OBJECT'
     | 'SCENE_PATCH_ENV'
+    | 'SCENE_REMOVE_OBJECT'
   payload?: unknown
   enabled?: boolean
   targetId?: string
@@ -96,6 +98,9 @@ export interface PostMessageHostHandlers {
 
   /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— mutate camera/lights/scene.background·fog，不 dispose 物体树 */
   onPatchEnv?: (env: EnvUpdate) => void
+
+  /** SCENE_REMOVE_OBJECT：按 __id 即时移除运行时 Object3D（parent.remove + dispose，不碰 data 层） */
+  onRemoveObject?: (id: string) => void
 }
 
 /** 向宿主发送一条 embed→父 消息 */
@@ -155,6 +160,11 @@ export const bindPostMessageHost = (handlers: PostMessageHostHandlers): () => vo
           break;
         case 'SCENE_PATCH_ENV':
           handlers.onPatchEnv?.({ camera: data.camera, lights: data.lights, scene: data.scene });
+          break;
+        case 'SCENE_REMOVE_OBJECT':
+          if (data.id) {
+            handlers.onRemoveObject?.(data.id);
+          }
           break;
         default:
           // 未知消息类型，忽略

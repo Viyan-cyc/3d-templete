@@ -137,6 +137,12 @@ export interface Scene3DHandle {
    */
   editObject?: (p: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
 
+  /**
+   * 按 __id 即时从运行时场景树移除 Object3D（SCENE_REMOVE_OBJECT）。
+   * parent.remove + dispose 几何/材质，不碰 data 层（持久化由宿主侧 editDelta.deleted → patchHandlerSkip 改源码）。
+   */
+  removeObject?: (id: string) => void
+
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
@@ -231,6 +237,33 @@ const applyMaterial = (obj: THREE.Object3D, m: MaterialSnapshot): void => {
   );
 };
 
+/** 运行时移除物体 + dispose 其 geometry/material（避免 GPU 资源泄漏） */
+const disposeSceneObject = (app: App3D, id: string): void => {
+  const obj = findByUserId(app.scene, id);
+  if (!obj) {
+    return;
+  }
+  const parent = obj.parent;
+  if (!parent) {
+    return;
+  }
+  parent.remove(obj);
+  obj.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (mesh.geometry) {
+      mesh.geometry.dispose();
+    }
+    const raw = (mesh as unknown as EditMeshLike).material;
+    if (raw) {
+      if (Array.isArray(raw)) {
+        raw.forEach((m) => (m as THREE.Material).dispose?.());
+      } else {
+        (raw as THREE.Material).dispose?.();
+      }
+    }
+  });
+};
+
 /** 组装对外 handle（update / dispose 等方法闭包） */
 const createHandle = (params: {
   app: App3D
@@ -302,6 +335,7 @@ const createHandle = (params: {
         applyMaterial(obj, p.material);
       }
     },
+    removeObject: (id: string) => disposeSceneObject(app, id),
     dispose(): void {
       if (disposed) {
         return;
