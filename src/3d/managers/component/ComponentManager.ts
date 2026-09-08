@@ -96,7 +96,14 @@ export class ComponentManager {
    */
   create(node: TreeNode, ctx: ComponentContext): THREE.Object3D | null {
     const handler = this._handlers.get(node.type);
-    const result = handler?.create?.(node, ctx) ?? null;
+    let result: THREE.Object3D | null;
+    try {
+      result = handler?.create?.(node, ctx) ?? null;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[ComponentManager] handler "${node.type}" (${node.id}) create 抛错: ${msg}`);
+      return null;
+    }
     if (result) {
       result.userData.__id = node.id;
       result.userData.__componentType = node.type;
