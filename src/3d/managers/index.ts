@@ -4,3 +4,4 @@ export {
   ComponentManager, componentManager, registerComponentHandlers, disposeComponentHandlers,
 } from './component';
 export type { ComponentHandler, ComponentContext } from './component';
+export * from './app';
