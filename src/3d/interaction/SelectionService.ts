@@ -231,6 +231,11 @@ export class SelectionService {
   private readonly visuals: SelectionVisuals;
   private readonly canvas: HTMLCanvasElement;
 
+  /** 高亮可视化实例（供 SCENE_SELECT 大纲点击高亮复用，不经拾取链路） */
+  get visualRef(): SelectionVisuals {
+    return this.visuals;
+  }
+
   constructor(
     scene: THREE.Scene,
     visuals: SelectionVisuals,
@@ -314,7 +319,12 @@ export class SelectionService {
     }
     this.resolved = true;
 
-    for (const hit of e.intersections) {
+    // 遍历取首个「带 __id 且未锁定」的命中（锁定检查沿父子链查 __locked，锁定整体则子部件也锁）
+    const hit = e.intersections.find((i) => {
+      const found = this.resolveId(i.object);
+      return found !== null && !this.isLocked(found.obj);
+    });
+    if (hit) {
       const found = this.resolveId(hit.object);
       if (found) {
         this.emitPick(found.obj, found.id);
@@ -323,6 +333,18 @@ export class SelectionService {
     }
     // 有命中但链上无 __id（点中非实体 mesh，如地面/辅助线）→ 取消选中（与原 picker 一致）
     this.handleMissed();
+  }
+
+  /** 沿父子链查 __locked —— 任一祖先锁定则视为锁定（锁定整体 = 子部件不可选） */
+  private isLocked(obj: THREE.Object3D): boolean {
+    let cur: THREE.Object3D | null = obj;
+    while (cur) {
+      if (cur.userData?.__locked === true) {
+        return true;
+      }
+      cur = cur.parent;
+    }
+    return false;
   }
 
   /** 空白点击 / 无 __id 命中：清高亮 + 回传空 id（取消选中） */

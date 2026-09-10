@@ -38,7 +38,7 @@ import {
 } from './scene';
 import { SelectionService, type MaterialSnapshot } from './interaction/SelectionService';
 import { SelectionVisuals } from './interaction/SelectionVisuals';
-import type { SceneEditTransform } from './bridge/postMessageHost';
+import type { SceneEditTransform, SceneTreeNode } from './bridge/postMessageHost';
 import { CameraRig } from './interaction/CameraRig';
 import { InteractiveManager } from '@a3d/a3d-components/interactive';
 import { applySyncProps, type MaterialConfig } from '@a3d/a3d-components/material';
@@ -143,6 +143,29 @@ export interface Scene3DHandle {
    */
   removeObject?: (id: string) => void
 
+  /**
+   * 查询场景 Object3D 树（SCENE_QUERY_TREE）。
+   * 遍历 app.scene.traverse()，收集 userData.__id 非空的节点（根+子部件+兜底 part-N），
+   * 跳过无 __id 的纯几何 leaf mesh，回传 SceneTreeNode[] 供宿主大纲面板渲染。
+   */
+  queryTree?: () => SceneTreeNode[];
+
+  /**
+   * 按 __id 高亮物体（SCENE_SELECT）。
+   * 大纲点击触发：findByUserId 定位 + SelectionVisuals.highlight（复用选中高亮），
+   * 不发 SCENE_PICK（区别于 canvas 点击拾取）。
+   */
+  selectObject?: (targetId: string) => void;
+
+  /** 切换可见性（SCENE_SET_VISIBLE）：递归设 obj + 子孙 visible，运行时态不落盘 */
+  setVisible?: (id: string, visible: boolean) => void;
+
+  /** 重命名（SCENE_RENAME）：改 Object3D.name，不改 __id，运行时态不落盘 */
+  renameObject?: (id: string, name: string) => void;
+
+  /** 锁定/解锁（SCENE_SET_LOCKED）：设 userData.__locked，picker handleClick 跳过锁定物，运行时态不落盘 */
+  setLocked?: (id: string, locked: boolean) => void;
+
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
 }
@@ -237,6 +260,66 @@ const applyMaterial = (obj: THREE.Object3D, m: MaterialSnapshot): void => {
   );
 };
 
+/**
+ * 大纲树构建（SCENE_QUERY_TREE）：遍历收集 userData.__id 非空节点（根+子部件+兜底 part-N），
+ * 跳过无 __id 的纯几何 leaf mesh；traverse 顺序父先于子，先收集再回填 children。
+ */
+const buildSceneTree = (scene: THREE.Scene): SceneTreeNode[] => {
+  const nodes: SceneTreeNode[] = [];
+  const idToChildren = new Map<string, string[]>();
+  scene.traverse((obj) => {
+    const uid = obj.userData?.__id;
+    if (typeof uid !== 'string' || uid === '') {
+      return;
+    }
+    const parent = obj.parent;
+    const parentId =
+      parent && typeof parent.userData?.__id === 'string' && parent.userData.__id !== ''
+        ? parent.userData.__id
+        : null;
+    const node: SceneTreeNode = {
+      id: uid,
+      name: obj.name || uid,
+      type: typeof obj.userData?.__componentType === 'string' ? obj.userData.__componentType : undefined,
+      parentId,
+      isLogicalRoot: obj.userData?.__logicalRoot === true,
+      visible: obj.visible,
+      locked: obj.userData?.__locked === true,
+    };
+    nodes.push(node);
+    if (parentId) {
+      const arr = idToChildren.get(parentId) ?? [];
+      arr.push(uid);
+      idToChildren.set(parentId, arr);
+    }
+  });
+  for (const n of nodes) {
+    n.children = idToChildren.get(n.id) ?? [];
+  }
+  return nodes;
+};
+
+/** 按 __id 找到物体执行 mutator（找不到静默跳过），setVisible/rename/setLocked 运行时直改共用 */
+const mutateByUserId = (scene: THREE.Scene, id: string, fn: (obj: THREE.Object3D) => void): void => {
+  const obj = findByUserId(scene, id);
+  if (obj) {
+    fn(obj);
+  }
+};
+
+/** 运行时直改材质/transform（SCENE_EDIT_OBJECT）：position/rotation/scale 三轴数组直设 */
+const applyTransform = (obj: THREE.Object3D, t: SceneEditTransform): void => {
+  if (t.position) {
+    obj.position.set(t.position[0] ?? 0, t.position[1] ?? 0, t.position[2] ?? 0);
+  }
+  if (t.rotation) {
+    obj.rotation.set(t.rotation[0] ?? 0, t.rotation[1] ?? 0, t.rotation[2] ?? 0);
+  }
+  if (t.scale) {
+    obj.scale.set(t.scale[0] ?? 1, t.scale[1] ?? 1, t.scale[2] ?? 1);
+  }
+};
+
 /** 运行时移除物体 + dispose 其 geometry/material（避免 GPU 资源泄漏） */
 const disposeSceneObject = (app: App3D, id: string): void => {
   const obj = findByUserId(app.scene, id);
@@ -264,6 +347,33 @@ const disposeSceneObject = (app: App3D, id: string): void => {
   });
 };
 
+/** handle.dispose 实现：按序释放 GPU/DOM/事件资源（幂等由 state.disposed 标志保证） */
+const disposeHandle = (
+  state: { disposed: boolean },
+  deps: {
+    selection?: SelectionService
+    interactiveManager: InteractiveManager
+    resizeObserver: ResizeObserver
+    controls: OrbitControlsInstance
+    cardManager: CardManager
+    css2DRenderer: CSS2DRenderer
+    app: App3D
+  },
+): void => {
+  if (state.disposed) {
+    return;
+  }
+  state.disposed = true;
+  deps.selection?.dispose();
+  deps.interactiveManager.dispose();
+  deps.resizeObserver.disconnect();
+  deps.controls.dispose();
+  deps.cardManager.dispose();
+  deps.css2DRenderer.domElement.remove();
+  disposeComponentHandlers();
+  deps.app.dispose();
+};
+
 /** 组装对外 handle（update / dispose 等方法闭包） */
 const createHandle = (params: {
   app: App3D
@@ -282,7 +392,7 @@ const createHandle = (params: {
     app, cardManager, css2DRenderer, controls, objectIndex, cardRules,
     resizeObserver, interactiveManager, cameraRig, selection,
   } = params;
-  let disposed = false;
+  const disposedState = { disposed: false };
   let source = params.source;
 
   return {
@@ -314,41 +424,52 @@ const createHandle = (params: {
       const height = app.canvas.clientHeight || 1;
       updateEnvironment(app, env, { width, height });
     },
-    editObject: (p) => {
-      const obj = findByUserId(app.scene, p.id);
+    editObject: (p) =>
+      mutateByUserId(app.scene, p.id, (obj) => {
+        if (p.transform) {
+          applyTransform(obj, p.transform);
+        }
+        if (p.material) {
+          applyMaterial(obj, p.material);
+        }
+      }),
+    removeObject: (id: string) => disposeSceneObject(app, id),
+    queryTree: () => buildSceneTree(app.scene),
+    selectObject: (targetId: string) => {
+      const obj = findByUserId(app.scene, targetId);
       if (!obj) {
         return;
       }
-      if (p.transform) {
-        const t = p.transform;
-        if (t.position) {
-          obj.position.set(t.position[0] ?? 0, t.position[1] ?? 0, t.position[2] ?? 0);
-        }
-        if (t.rotation) {
-          obj.rotation.set(t.rotation[0] ?? 0, t.rotation[1] ?? 0, t.rotation[2] ?? 0);
-        }
-        if (t.scale) {
-          obj.scale.set(t.scale[0] ?? 1, t.scale[1] ?? 1, t.scale[2] ?? 1);
-        }
-      }
-      if (p.material) {
-        applyMaterial(obj, p.material);
+      // 复用 SelectionService 的 visuals 高亮（若 selection 存在）；否则直接 new SelectionVisuals
+      if (selection) {
+        selection.visualRef.highlight(obj);
       }
     },
-    removeObject: (id: string) => disposeSceneObject(app, id),
+    setVisible: (id: string, visible: boolean) =>
+      mutateByUserId(app.scene, id, (obj) => {
+        obj.visible = visible;
+        obj.traverse((c) => {
+          c.visible = visible;
+        });
+      }),
+    renameObject: (id: string, name: string) =>
+      mutateByUserId(app.scene, id, (obj) => {
+        obj.name = name;
+      }),
+    setLocked: (id: string, locked: boolean) =>
+      mutateByUserId(app.scene, id, (obj) => {
+        obj.userData.__locked = locked;
+      }),
     dispose(): void {
-      if (disposed) {
-        return;
-      }
-      disposed = true;
-      selection?.dispose();
-      interactiveManager.dispose();
-      resizeObserver.disconnect();
-      controls.dispose();
-      cardManager.dispose();
-      css2DRenderer.domElement.remove();
-      disposeComponentHandlers();
-      app.dispose();
+      disposeHandle(disposedState, {
+        interactiveManager,
+        resizeObserver,
+        controls,
+        cardManager,
+        css2DRenderer,
+        app,
+        selection,
+      });
     },
   };
 };

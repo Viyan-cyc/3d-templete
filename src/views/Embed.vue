@@ -238,6 +238,29 @@ onMounted(() => {
     onRemoveObject: (id) => {
       handle?.removeObject?.(id)
     },
+    // SCENE_QUERY_TREE：遍历场景 Object3D 树回传给宿主大纲面板
+    onQueryTree: () => {
+      const nodes = handle?.queryTree?.()
+      if (nodes) {
+        postToParent({ type: 'SCENE_TREE', nodes })
+      }
+    },
+    // SCENE_SELECT：大纲点击 → 按 __id 高亮物体（复用 SelectionVisuals，不发 SCENE_PICK）
+    onSelect: (targetId) => {
+      handle?.selectObject?.(targetId)
+    },
+    // SCENE_SET_VISIBLE：切换可见性（运行时态，递归设子孙 visible）
+    onSetVisible: (id, visible) => {
+      handle?.setVisible?.(id, visible)
+    },
+    // SCENE_RENAME：改 Object3D.name（不改 __id）
+    onRename: (id, name) => {
+      handle?.renameObject?.(id, name)
+    },
+    // SCENE_SET_LOCKED：锁定/解锁（userData.__locked，picker 跳过）
+    onSetLocked: (id, locked) => {
+      handle?.setLocked?.(id, locked)
+    },
   })
 
   // 兜底：独立访问 /embed（非 iframe）时，等一会若没收到 SCENE_UPDATE，
