@@ -43,13 +43,18 @@ const applyShadowConfig = (
   }
   const sc = shadow.camera;
   if (sc) {
-    light.shadow.camera.near = sc.near;
-    light.shadow.camera.far = sc.far;
-    light.shadow.camera.left = sc.left;
-    light.shadow.camera.right = sc.right;
-    light.shadow.camera.top = sc.top;
-    light.shadow.camera.bottom = sc.bottom;
-    light.shadow.camera.updateProjectionMatrix();
+    const cam = light.shadow.camera;
+    cam.near = sc.near;
+    cam.far = sc.far;
+    // left/right/top/bottom 仅正交相机（directional）有；spot 用 PerspectiveCamera，视锥由 angle 决定
+    if ((cam as THREE.OrthographicCamera).isOrthographicCamera) {
+      const o = cam as THREE.OrthographicCamera;
+      o.left = sc.left;
+      o.right = sc.right;
+      o.top = sc.top;
+      o.bottom = sc.bottom;
+    }
+    cam.updateProjectionMatrix();
   }
 };
 

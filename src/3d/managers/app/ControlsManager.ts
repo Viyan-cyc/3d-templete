@@ -1,9 +1,11 @@
 /**
  * ============================================================
- *  ControlsManager — OrbitControls 包装（每帧 update + dispose）
+ *  ControlsManager — OrbitControls 所有权 + 运行时热改
  *
  *  从 createScene3D controls 段抽出。注意：由 createScene3D 创建而非 App3D 持有
  *  （controls 选项在 Scene3DOptions；dispose 顺序须保持在 createHandle 序列内）。
+ *  每帧 controls.update() 由 createScene3D 直接注册进渲染循环（damping/autoRotate 跟随），
+ *  不经本类；本类只负责配置（初载 + set_controls op 热改）。
  *  Phase S set_controls op 落地：update(cfg) 热改阻尼/距离/极角/开关/autoRotate。
  * ============================================================
  */
@@ -65,11 +67,6 @@ export class ControlsManager {
     if (cfg.target) {
       c.target.set(cfg.target.x, cfg.target.y, cfg.target.z);
     }
-  }
-
-  /** 每帧 update（damping/autoRotate 跟随），由 createScene3D 注册进渲染循环 */
-  update(): void {
-    this.controls.update();
   }
 
   dispose(): void {

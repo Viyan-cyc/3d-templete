@@ -96,7 +96,7 @@ export class RendererManager {
   }
 
   /** 渲染统计（DebugOverlay HUD 每帧读） */
-  get info(): THREE.WebGLRenderer.Info {
+  get info(): THREE.WebGLRenderer['info'] {
     return this.renderer.info;
   }
 

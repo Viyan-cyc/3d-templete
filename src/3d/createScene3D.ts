@@ -30,7 +30,7 @@ import { App3D } from './App3D';
 import { CardManager } from './managers/card/CardManager';
 import type { CardStateCallback, CardScanRule } from './managers/card/types';
 import { ControlsManager } from './managers/app/ControlsManager';
-import { createOrbitControls } from './controls/OrbitControls';
+import type { createOrbitControls } from './controls/OrbitControls';
 import type { TreeScene, EnvUpdate } from './scene';
 import type { CameraRig } from './interaction/CameraRig';
 import { InteractiveManager } from '@a3d/a3d-components/interactive';
@@ -189,9 +189,14 @@ export const createScene3D = async (
   // 射线与渲染画面错位，点击全打偏（只命中包围场景的 Sky 球壁）。
   interactiveManager.setCamera(app.camera);
 
-  // 4. OrbitControls（相机替换之后再创建）；live-data.controls 优先于 options 硬编码
-  const controls = createOrbitControls(app.camera, canvas, controlsOpts);
-  const controlsManager = new ControlsManager({ camera: app.camera, domElement: canvas });
+  // 4. OrbitControls（相机替换之后再创建）——ControlsManager 单一包装（避免双实例绑同一 canvas 双倍响应）；
+  //    live-data.controls 优先于 options 硬编码
+  const controlsManager = new ControlsManager({
+    camera: app.camera,
+    domElement: canvas,
+    options: controlsOpts,
+  });
+  const controls = controlsManager.controls;
   if (data.controls) {
     controlsManager.update(data.controls);
   }
