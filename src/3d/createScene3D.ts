@@ -29,6 +29,7 @@
 import { App3D } from './App3D';
 import { CardManager } from './managers/card/CardManager';
 import type { CardStateCallback, CardScanRule } from './managers/card/types';
+import { ControlsManager } from './managers/app/ControlsManager';
 import { createOrbitControls } from './controls/OrbitControls';
 import type { TreeScene, EnvUpdate } from './scene';
 import type { CameraRig } from './interaction/CameraRig';
@@ -188,8 +189,12 @@ export const createScene3D = async (
   // 射线与渲染画面错位，点击全打偏（只命中包围场景的 Sky 球壁）。
   interactiveManager.setCamera(app.camera);
 
-  // 4. OrbitControls（相机替换之后再创建）
+  // 4. OrbitControls（相机替换之后再创建）；live-data.controls 优先于 options 硬编码
   const controls = createOrbitControls(app.camera, canvas, controlsOpts);
+  const controlsManager = new ControlsManager({ camera: app.camera, domElement: canvas });
+  if (data.controls) {
+    controlsManager.update(data.controls);
+  }
 
   // 5. CSS2D 卡片层（DOM 钉到 3D 物体）+ 卡片系统（CardManager，绑定交互底座 + 扫描注册卡片）
   const css2DRenderer = setupCss2DRenderer(container);
@@ -225,6 +230,7 @@ export const createScene3D = async (
     cardManager,
     css2DRenderer,
     controls,
+    controlsManager,
     objectIndex,
     cardRules,
     resizeObserver,

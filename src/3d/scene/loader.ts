@@ -33,13 +33,15 @@ export interface TreeNode {
 export interface TreeSceneEnv {
   background?: string
   environment?: { preset: string; intensity: number }
-  fog?: { type: string; color: string; near: number; far: number }
+
+  /** fog.type: 'linear'（near/far）| 'exp'（density，FogExp2） */
+  fog?: { type: string; color: string; near: number; far: number; density?: number }
   renderStyle?: string
 }
 
 /**
  * 树形场景：顶层 type 分组字典 + 环境字段 + remove。
- * - version/scene/camera/lights/remove 是保留 key；
+ * - version/scene/camera/lights/renderer/controls/remove 是保留 key；
  * - 其余每个 key 是一个 type 分组（TreeNode[]），type = key 名。
  * - 索引签名让任意 type 分组都能通过类型检查。
  */
@@ -48,12 +50,46 @@ export interface TreeScene {
   scene?: TreeSceneEnv
   camera?: LiveDataCamera
   lights?: LiveDataLight[]
+  renderer?: LiveDataRenderer
+  controls?: LiveDataControls
 
   /** 按 id 删除（update 时先于分组处理） */
   remove?: string[]
 
   /** type 分组：key=type 名，value=该 type 的节点数组。单个实例也包一层数组 */
   [type: string]: unknown
+}
+
+/** 渲染器运行时可变配置（构造参数 antialias/alpha/powerPreference 不在此；缺省走 templete 默认） */
+export interface LiveDataRenderer {
+
+  /** 色调映射，见 TONE_MAPPINGS 键（RendererManager） */
+  toneMapping?: string
+  toneMappingExposure?: number
+
+  /** 阴影贴图类型：'BasicShadowMap'|'PCFShadowMap'|'PCFSoftShadowMap'|'VSMShadowMap' */
+  shadowMapType?: string
+
+  /** 输出色彩空间：'srgb' | 'linear' */
+  outputColorSpace?: string
+  autoClear?: boolean
+}
+
+/** 轨道控制器运行时可变配置（缺省走 OrbitControls 默认） */
+export interface LiveDataControls {
+  enableDamping?: boolean
+  dampingFactor?: number
+  minDistance?: number
+  maxDistance?: number
+
+  /** 极角上限（弧度，防穿地下） */
+  maxPolarAngle?: number
+  enableRotate?: boolean
+  enableZoom?: boolean
+  enablePan?: boolean
+  autoRotate?: boolean
+  autoRotateSpeed?: number
+  target?: { x: number; y: number; z: number }
 }
 
 export interface LiveDataCamera {
@@ -75,7 +111,7 @@ export interface LiveDataCamera {
 }
 
 export interface LiveDataLight {
-  type: 'ambient' | 'hemisphere' | 'directional'
+  type: 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot' | 'rectarea'
   color?: string
   skyColor?: string
   groundColor?: string
@@ -83,8 +119,25 @@ export interface LiveDataLight {
   position?: number[]
   target?: number[]
   castShadow?: boolean
+
+  /** point/spot：物理衰减距离与衰减系数 */
+  distance?: number
+  decay?: number
+
+  /** spot：光锥半角（弧度）与半影软边（0-1） */
+  angle?: number
+  penumbra?: number
+
+  /** rectarea：发光面尺寸 */
+  width?: number
+  height?: number
   shadow?: {
     mapSize?: number
+
+    /** 阴影偏移（消痤疮条纹）；normalBias 消缝隙，radius 软化（PCFSoft/VSM） */
+    bias?: number
+    normalBias?: number
+    radius?: number
     camera?: {
       near: number
       far: number

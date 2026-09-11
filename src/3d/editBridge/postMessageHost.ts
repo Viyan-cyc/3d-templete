@@ -101,10 +101,12 @@ export interface SceneHostMessage {
   /** SCENE_EDIT_OBJECT：transform 覆盖 */
   transform?: SceneEditTransform
 
-  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— camera/lights/scene 保留键，运行时 mutate 不重建物体树 */
+  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— camera/lights/scene/renderer/controls 保留键，运行时 mutate 不重建物体树 */
   camera?: EnvUpdate['camera']
   lights?: EnvUpdate['lights']
   scene?: EnvUpdate['scene']
+  renderer?: EnvUpdate['renderer']
+  controls?: EnvUpdate['controls']
 
   /** SCENE_SET_VISIBLE / SCENE_SET_LOCKED：运行时切换（运行时态，不落盘） */
   visible?: boolean
@@ -140,7 +142,7 @@ export interface PostMessageHostHandlers {
   /** SCENE_EDIT_OBJECT：按 __id 直改运行时 Object3D 的材质/transform（子 mesh 不在 data 层，走此即时通路） */
   onEditObject?: (payload: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
 
-  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— mutate camera/lights/scene.background·fog，不 dispose 物体树 */
+  /** SCENE_PATCH_ENV：场景级增量更新（M-3 ①）—— mutate camera/lights/scene/renderer/controls，不 dispose 物体树 */
   onPatchEnv?: (env: EnvUpdate) => void
 
   /** SCENE_REMOVE_OBJECT：按 __id 即时移除运行时 Object3D（parent.remove + dispose，不碰 data 层） */
@@ -219,7 +221,13 @@ export const bindPostMessageHost = (handlers: PostMessageHostHandlers): () => vo
           }
           break;
         case 'SCENE_PATCH_ENV':
-          handlers.onPatchEnv?.({ camera: data.camera, lights: data.lights, scene: data.scene });
+          handlers.onPatchEnv?.({
+            camera: data.camera,
+            lights: data.lights,
+            scene: data.scene,
+            renderer: data.renderer,
+            controls: data.controls,
+          });
           break;
         case 'SCENE_REMOVE_OBJECT':
           if (data.id) {

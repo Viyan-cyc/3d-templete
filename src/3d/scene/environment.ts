@@ -16,7 +16,10 @@
  *     引用的既有 quirk 原样保留不修（宿主经重建场景路径兜底）
  */
 import type { App3D } from '../App3D';
-import type { TreeScene, LiveDataLight } from './loader';
+import type {
+  TreeScene, LiveDataLight, LiveDataRenderer, LiveDataControls,
+} from './loader';
+import type { ControlsManager } from '../managers/app/ControlsManager';
 
 /**
  * 应用场景环境：背景/雾 → 清空 → 相机 → 灯光 → PMREM 环境。
@@ -49,24 +52,35 @@ export const applyEnvironment = (
 
   // PMREM 环境光（IBL，physical 材质必需）
   app.environmentManager.applyPMREM(scene.environment);
+
+  // 渲染参数初载（全量重建路径，材料后建无需 markDirty）
+  if (merged.renderer) {
+    app.rendererManager.update(merged.renderer);
+  }
 };
 
 /**
- * 场景级增量更新（M-3 ①）：只重应用 camera/lights/scene.background·fog·environment，**不重建物体树**。
- * lights 按 __id=light-${index} 定位 mutate；新增 add + 盖 __id；旧 index 不在新集 → remove。
- * camera type 变（perspective↔orthographic）才 setCamera 重建，否则 mutate position/lookAt/fov。
- * 对应 set_light/set_camera/set_scene op 的运行时 mutate 路径（区别于 applyEnvironment 全量重建）。
+ * 场景级增量更新（M-3 ①）：只重应用 camera/lights/scene.background·fog·environment/renderer/controls，
+ * **不重建物体树**。
+ * lights 按 __id=light-${index} 定位 mutate（type 变则该槽位重建）；新增 add + 盖 __id；
+ * 旧 index 不在新集 → remove。camera type 变（perspective↔orthographic）才 setCamera 重建，
+ * 否则 mutate position/lookAt/fov。renderer 的 toneMapping/shadowMapType 变化时全量材质重编译。
+ * 对应 set_light/set_camera/set_scene/set_renderer/set_controls op 的运行时 mutate 路径
+ * （区别于 applyEnvironment 全量重建）。
  */
 export interface EnvUpdate {
   camera?: NonNullable<TreeScene['camera']>;
   lights?: LiveDataLight[];
   scene?: NonNullable<TreeScene['scene']>;
+  renderer?: LiveDataRenderer;
+  controls?: LiveDataControls;
 }
 
 export const updateEnvironment = (
   app: App3D,
   env: EnvUpdate,
   viewSize: { width: number; height: number },
+  controlsManager?: ControlsManager,
 ): void => {
   if (env.scene) {
     app.sceneManager.update(env.scene);
@@ -76,5 +90,15 @@ export const updateEnvironment = (
   }
   if (env.camera) {
     app.cameraManager.update(env.camera, viewSize);
+  }
+  if (env.renderer) {
+    const shaderChanged = app.rendererManager.update(env.renderer);
+    if (shaderChanged) {
+      // toneMapping/shadowMapType 热改须重编 shader（three 不自动重编已编译材质）
+      app.sceneManager.markMaterialsDirty();
+    }
+  }
+  if (env.controls && controlsManager) {
+    controlsManager.update(env.controls);
   }
 };

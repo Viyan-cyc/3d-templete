@@ -25,6 +25,8 @@ export type {
   TreeSceneEnv,
   LiveDataCamera,
   LiveDataLight,
+  LiveDataRenderer,
+  LiveDataControls,
   LiveDataGeometry,
   LiveDataMaterial,
   ApplyLiveDataOptions,

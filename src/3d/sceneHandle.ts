@@ -11,6 +11,7 @@ import type { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.j
 import type { App3D } from './App3D';
 import type { CardManager } from './managers/card/CardManager';
 import type { CardScanRule } from './managers/card/types';
+import type { ControlsManager } from './managers/app/ControlsManager';
 import {
   updateTreeScene, updateEnvironment, type ObjectIndex, type TreeScene, type EnvUpdate,
 } from './scene';
@@ -51,6 +52,7 @@ export const createHandle = (params: {
   cardManager: CardManager
   css2DRenderer: CSS2DRenderer
   controls: OrbitControlsInstance
+  controlsManager: ControlsManager
   objectIndex: ObjectIndex
   cardRules: CardScanRule[] | undefined
   resizeObserver: ResizeObserver
@@ -59,7 +61,7 @@ export const createHandle = (params: {
   cameraRig: CameraRig
 }): Scene3DHandle => {
   const {
-    app, cardManager, css2DRenderer, controls, objectIndex, cardRules,
+    app, cardManager, css2DRenderer, controls, controlsManager, objectIndex, cardRules,
     resizeObserver, interactiveManager, cameraRig,
   } = params;
   const disposedState = { disposed: false };
@@ -92,7 +94,7 @@ export const createHandle = (params: {
     updateEnvironment: (env: EnvUpdate) => {
       const width = app.canvas.clientWidth || 1;
       const height = app.canvas.clientHeight || 1;
-      updateEnvironment(app, env, { width, height });
+      updateEnvironment(app, env, { width, height }, controlsManager);
     },
     dispose(): void {
       disposeHandle(disposedState, {
