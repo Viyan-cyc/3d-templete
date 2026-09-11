@@ -198,7 +198,7 @@ export const createScene3D = async (
   });
   const controls = controlsManager.controls;
   if (data.controls) {
-    controlsManager.update(data.controls);
+    controlsManager.applyConfig(data.controls);
   }
 
   // 5. CSS2D 卡片层（DOM 钉到 3D 物体）+ 卡片系统（CardManager，绑定交互底座 + 扫描注册卡片）
@@ -210,7 +210,7 @@ export const createScene3D = async (
   sharedState.cardManager = cardManager;
 
   // 6. 接入 App3D 自有渲染循环（update → WebGL render → CSS2D post-render）
-  app.addUpdateCallback(() => controls.update());
+  app.addUpdateCallback(() => controlsManager.update());
   // 交互底座每帧 update：相机移动后刷新 hover（无 hover 声明时短路为 no-op，零 raycast）
   app.addUpdateCallback(() => interactiveManager.update());
   app.addPostRenderCallback(() => css2DRenderer.render(app.scene, app.camera));

@@ -4,9 +4,9 @@
  *
  *  从 createScene3D controls 段抽出。注意：由 createScene3D 创建而非 App3D 持有
  *  （controls 选项在 Scene3DOptions；dispose 顺序须保持在 createHandle 序列内）。
- *  每帧 controls.update() 由 createScene3D 直接注册进渲染循环（damping/autoRotate 跟随），
- *  不经本类；本类只负责配置（初载 + set_controls op 热改）。
- *  Phase S set_controls op 落地：update(cfg) 热改阻尼/距离/极角/开关/autoRotate。
+ *  每帧 update()（damping/autoRotate 跟随）由 createScene3D 注册进渲染循环；
+ *  applyConfig(cfg) 热改配置（初载 live-data.controls + set_controls op 热改）。
+ *  Phase S set_controls op 落地：applyConfig(cfg) 热改阻尼/距离/极角/开关/autoRotate。
  * ============================================================
  */
 import type * as THREE from 'three';
@@ -31,8 +31,13 @@ export class ControlsManager {
     this.controls = createOrbitControls(params.camera, params.domElement, params.options);
   }
 
+  /** 每帧 update（damping/autoRotate 跟随），由 createScene3D 注册进渲染循环 */
+  update(): void {
+    this.controls.update();
+  }
+
   /** 运行时热改控制参数（set_controls op / 面板 / 初载 live-data.controls）；undefined 字段不覆盖 */
-  update(cfg: LiveDataControls): void {
+  applyConfig(cfg: LiveDataControls): void {
     const c = this.controls;
     if (cfg.enableDamping !== undefined) {
       c.enableDamping = cfg.enableDamping;

@@ -99,6 +99,6 @@ export const updateEnvironment = (
     }
   }
   if (env.controls && controlsManager) {
-    controlsManager.update(env.controls);
+    controlsManager.applyConfig(env.controls);
   }
 };
