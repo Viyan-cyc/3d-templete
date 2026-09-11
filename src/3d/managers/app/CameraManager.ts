@@ -6,8 +6,10 @@
  *  关键耦合点：_orthoHalfH —— setCamera(正交) 时记录半高基准，resize 按 aspect
  *  重算 left/right（水平范围跟随、垂直范围不变）。两者必须同住此类。
  *
- *  既有 quirk（Phase R 不修）：update type 变换重建相机后，OrbitControls /
- *  InteractiveManager / CameraRig 持有的旧 camera 引用不刷新（宿主通过重建场景路径兜底）。
+ *  既有 quirk 已修（updateEnvironment 路径）：update type 变换重建相机后，
+ *  sceneHandle wrapper 同步 OrbitControls / InteractiveManager / CameraRig 的相机引用
+ *  （见 sceneHandle.updateEnvironment camBefore 对比）；applyEnvironment 全量路径 controls
+ *  在相机替换之后创建，天然无此问题。
  * ============================================================
  */
 import * as THREE from 'three';
@@ -121,7 +123,10 @@ export class CameraManager {
   update(camCfg: NonNullable<TreeScene['camera']>, viewSize: { width: number; height: number }): void {
     const cam = this.camera as THREE.PerspectiveCamera | THREE.OrthographicCamera;
     const isOrtho = (cam as THREE.OrthographicCamera).isOrthographicCamera === true;
-    const wantOrtho = camCfg.type === 'orthographic';
+    // buildCamera 对「type=orthographic 但缺 orthographic 参数」会 fallback 透视相机；
+    // 只有带参数的正交配置才算真切换，否则「名义切型、实际没切」会让每次 camera patch
+    // 都走重建分支换实例（OrbitControls/CameraRig 持旧相机引用 → 渲染新相机、交互拽旧相机，场景动不了）。
+    const wantOrtho = camCfg.type === 'orthographic' && Boolean(camCfg.orthographic);
     if (isOrtho === wantOrtho) {
       if (Array.isArray(camCfg.position) && camCfg.position.length >= 3) {
         cam.position.set(camCfg.position[0], camCfg.position[1], camCfg.position[2]);

@@ -94,7 +94,17 @@ export const createHandle = (params: {
     updateEnvironment: (env: EnvUpdate) => {
       const width = app.canvas.clientWidth || 1;
       const height = app.canvas.clientHeight || 1;
+      const camBefore = app.cameraManager.camera;
       updateEnvironment(app, env, { width, height }, controlsManager);
+      if (app.cameraManager.camera !== camBefore) {
+        // camera type 变（perspective↔orthographic）重建后同步所有持相机引用的组件：
+        // 否则 OrbitControls/CameraRig/InteractiveManager 仍操作旧相机——渲染新相机、交互拽旧相机，
+        // 表现为「场景动不了」（鼠标拖拽/autoRotate 全失效）。
+        const cam = app.cameraManager.camera;
+        controlsManager.controls.object = cam;
+        interactiveManager.setCamera(cam);
+        cameraRig.setCamera(cam);
+      }
     },
     dispose(): void {
       disposeHandle(disposedState, {

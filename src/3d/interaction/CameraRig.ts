@@ -28,7 +28,7 @@ interface CameraControlsLike {
 
 export class CameraRig {
 
-  private readonly camera: THREE.Camera;
+  private camera: THREE.Camera;
   private readonly controls: CameraControlsLike;
   private readonly scene: THREE.Scene;
   private readonly initialPosition: THREE.Vector3;
@@ -87,5 +87,10 @@ export class CameraRig {
     this.controls.target.copy(this.initialTarget);
     this.camera.lookAt(this.initialTarget);
     this.controls.update();
+  }
+
+  /** 场景级 patch 重建相机（perspective↔orthographic）后同步引用，保证 flyTo/resetCamera 操作当前渲染相机 */
+  setCamera(camera: THREE.Camera): void {
+    this.camera = camera;
   }
 }
