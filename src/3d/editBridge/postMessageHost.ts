@@ -29,7 +29,7 @@
  * ============================================================
  */
 
-import type { MaterialSnapshot } from '../interaction/SelectionService';
+import type { MaterialSnapshot } from './SelectionService';
 import type { EnvUpdate } from '../scene';
 
 /** SCENE_EDIT_OBJECT 的 transform 载荷（三轴数组，沿用 SceneConfig 约定：position/rotation/scale） */

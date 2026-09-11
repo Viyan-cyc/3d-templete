@@ -27,12 +27,10 @@
  */
 
 import { App3D } from './App3D';
-import type { CardScanRule } from './managers/card/types';
+import { CardManager } from './managers/card/CardManager';
+import type { CardStateCallback, CardScanRule } from './managers/card/types';
 import { createOrbitControls } from './controls/OrbitControls';
 import type { TreeScene, EnvUpdate } from './scene';
-import { SelectionService, type MaterialSnapshot } from './interaction/SelectionService';
-import { SelectionVisuals } from './interaction/SelectionVisuals';
-import type { SceneEditTransform, SceneTreeNode } from './bridge/postMessageHost';
 import type { CameraRig } from './interaction/CameraRig';
 import { InteractiveManager } from '@a3d/a3d-components/interactive';
 import { registerComponentHandlers } from './managers';
@@ -98,6 +96,9 @@ export interface Scene3DHandle {
   /** OrbitControls 实例，用于编程式控制相机（target / zoom / fit-to-object 等） */
   controls: OrbitControlsInstance
 
+  /** 交互底座（指针事件路由；editBridge attachEditBridge 挂拾取用） */
+  interactiveManager: InteractiveManager
+
   /** 订阅卡片状态变化，喂给 <CardHost :cards> */
   onCardState(cb: CardStateCallback): () => void
 
@@ -109,9 +110,6 @@ export interface Scene3DHandle {
 
   /** 运行时切换调试模式：true 显示 HUD，false 关闭 */
   setDebug(mode: boolean): void
-
-  /** 编辑态选择服务（仅 interactive:true 时存在；Embed.vue 设 onPick 回传 SCENE_PICK） */
-  selection?: SelectionService
 
   /** 相机操作（通用：运行态/编辑态均可编程式聚焦、切主题、复位） */
   cameraRig: CameraRig
@@ -129,39 +127,10 @@ export interface Scene3DHandle {
   updateEnvironment: (env: EnvUpdate) => void
 
   /**
-   * 按 __id 直改运行时 Object3D 的材质/transform（SCENE_EDIT_OBJECT）。
-   * 用于编辑态选中的子 mesh（不在 data 层、数据层增量更新够不到）——即时生效，不落盘 live-data。
+   * 编辑态方法（selection/editObject/removeObject/queryTree/selectObject/setVisible/
+   * renameObject/setLocked）已剥到 editBridge/EditSceneHandle（C4 物理隔离），
+   * core handle 不再持有；宿主经 attachEditBridge(core) 获取。
    */
-  editObject?: (p: { id: string; material?: MaterialSnapshot; transform?: SceneEditTransform }) => void
-
-  /**
-   * 按 __id 即时从运行时场景树移除 Object3D（SCENE_REMOVE_OBJECT）。
-   * parent.remove + dispose 几何/材质，不碰 data 层（持久化由宿主侧 editDelta.deleted → patchHandlerSkip 改源码）。
-   */
-  removeObject?: (id: string) => void
-
-  /**
-   * 查询场景 Object3D 树（SCENE_QUERY_TREE）。
-   * 遍历 app.scene.traverse()，收集 userData.__id 非空的节点（根+子部件+兜底 part-N），
-   * 跳过无 __id 的纯几何 leaf mesh，回传 SceneTreeNode[] 供宿主大纲面板渲染。
-   */
-  queryTree?: () => SceneTreeNode[];
-
-  /**
-   * 按 __id 高亮物体（SCENE_SELECT）。
-   * 大纲点击触发：findByUserId 定位 + SelectionVisuals.highlight（复用选中高亮），
-   * 不发 SCENE_PICK（区别于 canvas 点击拾取）。
-   */
-  selectObject?: (targetId: string) => void;
-
-  /** 切换可见性（SCENE_SET_VISIBLE）：递归设 obj + 子孙 visible，运行时态不落盘 */
-  setVisible?: (id: string, visible: boolean) => void;
-
-  /** 重命名（SCENE_RENAME）：改 Object3D.name，不改 __id，运行时态不落盘 */
-  renameObject?: (id: string, name: string) => void;
-
-  /** 锁定/解锁（SCENE_SET_LOCKED）：设 userData.__locked，picker handleClick 跳过锁定物，运行时态不落盘 */
-  setLocked?: (id: string, locked: boolean) => void;
 
   /** 销毁：释放 GPU/DOM/事件资源 */
   dispose(): void
@@ -170,17 +139,10 @@ export interface Scene3DHandle {
 /** OrbitControls 实例类型（便于外部声明变量类型时引用） */
 export type OrbitControlsInstance = ReturnType<typeof createOrbitControls>
 
-/** 编辑态选择服务（仅 interactive:true 时调用：底座订阅 scene，拾取默认关闭，由 SCENE_PICK_MODE 触发 enable） */
-const setupSelection = (app: App3D, interactiveManager: InteractiveManager): SelectionService => {
-  const visuals = new SelectionVisuals(app.scene);
-  const selection = new SelectionService(app.scene, visuals, app.canvas);
-  selection.attach(interactiveManager);
-  app.addUpdateCallback(() => selection.update());
-  return selection;
-};
-
 /**
  * 初始化一个完整的树形场景驱动 3D 场景。
+ * 编辑态：createScene3D 返回 core handle（无 selection/编辑方法），
+ * 宿主经 editBridge/attachEditBridge 包一层得 EditSceneHandle（编辑能力与 core 物理隔离）。
  */
 export const createScene3D = async (
   canvas: HTMLCanvasElement,
@@ -254,10 +216,9 @@ export const createScene3D = async (
   // 8. 收集 3d-components 的 IUpdatable 组件（如 HeatMesh 需要每帧 update）
   setupUpdatables(app);
 
-  // 9. 相机操作（通用，注入 sharedState 供 handler 用）+ 编辑态选择服务（仅 interactive:true）
+  // 9. 相机操作（通用，注入 sharedState 供 handler 用）
   const cameraRig = createCameraRig(app, controls, merged);
   sharedState.cameraRig = cameraRig;
-  const selection = interactive ? setupSelection(app, interactiveManager) : undefined;
 
   return createHandle({
     app,
@@ -270,6 +231,5 @@ export const createScene3D = async (
     source: data,
     interactiveManager,
     cameraRig,
-    selection,
   });
 };

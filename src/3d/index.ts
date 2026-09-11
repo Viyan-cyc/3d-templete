@@ -69,9 +69,7 @@ export {
 export { getResourceManager, registerModels, registerMaterials } from './resources';
 export type { ResourceManager, CloneModelOpts, HunyuanGenerator } from './resources';
 
-// ---- 交互层（选择服务 + 相机操作，interactive 模式起）----
-export { SelectionService } from './interaction/SelectionService';
-export type { PickInfo, SelectionGranularity } from './interaction/SelectionService';
+// ---- 交互层（相机操作；编辑拾取见 @/3d/editBridge）----
 export { CameraRig } from './interaction/CameraRig';
 
 // ---- 3D 组件：缓存 ----

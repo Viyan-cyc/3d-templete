@@ -19,13 +19,13 @@ import type { Component } from 'vue'
 import * as THREE from 'three'
 import {
   createScene3D,
-  type Scene3DHandle,
   type CardState,
   type CardComponentRegistry,
   type TreeScene,
 } from '@/3d'
+import { attachEditBridge, type EditSceneHandle } from '@/3d/editBridge'
+import { bindPostMessageHost, postToParent } from '@/3d/editBridge'
 import { CardHost } from '@/adapters/vue'
-import { bindPostMessageHost, postToParent } from '@/3d/bridge/postMessageHost'
 import { cardRules } from '@/adapters/vue/sceneCardRules'
 import ExampleCard from '@/components/cards/ExampleCard.vue'
 
@@ -36,7 +36,7 @@ const statusText = ref('等待场景数据...')
 const error = ref('')
 const cardStates = ref<CardState[]>([])
 const cardRegistry = ref<CardComponentRegistry<Component> | null>(null)
-let handle: Scene3DHandle | null = null
+let handle: EditSceneHandle | null = null
 let detachBridge: (() => void) | null = null
 // 9a 门控：转发运行时错误给宿主的控制台桥——onMounted 装、onUnmounted 卸，仅 embed 上下文生效
 let originalConsoleError: typeof console.error | null = null
@@ -52,7 +52,7 @@ const isDebug =
   typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'true'
 
 /** DEBUG 工具（仅 ?debug=true 调用）：暴露 three 对象到 window + 打印场景包围盒/相机/子节点 */
-function logSceneDebug(h: Scene3DHandle): void {
+function logSceneDebug(h: EditSceneHandle): void {
   const w = window as unknown as { __scene?: unknown; __camera?: unknown; __handle?: unknown }
   w.__handle = h
   w.__scene = h.app.scene
@@ -109,13 +109,16 @@ async function renderScene(data: TreeScene | null) {
   loading.value = true
   statusText.value = '渲染场景...'
   try {
-    handle = await createScene3D(canvas, data, {
-      cardRules,
-      interactive: true, // 预览/编辑态：挂 postMessage 桥 + SelectionService
-      controls: {
-        maxPolarAngle: Math.PI / 2.3,
-      },
-    })
+    // core handle + 编辑桥（拾取/编辑方法与 core 物理隔离，C4）
+    handle = attachEditBridge(
+      await createScene3D(canvas, data, {
+        cardRules,
+        interactive: true, // CardManager editMode（卡片交互）
+        controls: {
+          maxPolarAngle: Math.PI / 2.3,
+        },
+      }),
+    )
     cardRegistry.value = handle.cardManager.registry as CardComponentRegistry<Component>
     // 注册 example 卡片组件（handler 命令式 addCard 用 type='example'，CardHost 据此渲染）
     handle.cardManager.registry.register('example', ExampleCard)
@@ -123,19 +126,17 @@ async function renderScene(data: TreeScene | null) {
       cardStates.value = states
     })
     // 拾取回调：命中物体 → postMessage SCENE_PICK 给宿主（octoapp 弹属性编辑器）
-    if (handle.selection) {
-      handle.selection.onPick = (info) => {
-        postToParent({
-          type: 'SCENE_PICK',
-          id: info.id,
-          name: info.name,
-          component: info.component,
-          props: info.props,
-          isMesh: info.isMesh,
-          material: info.material,
-          transform: info.transform,
-        })
-      }
+    handle.selection.onPick = (info) => {
+      postToParent({
+        type: 'SCENE_PICK',
+        id: info.id,
+        name: info.name,
+        component: info.component,
+        props: info.props,
+        isMesh: info.isMesh,
+        material: info.material,
+        transform: info.transform,
+      })
     }
 
     // DEBUG（仅 ?debug=true）：暴露 three 对象 + 打印包围盒/相机/子节点
@@ -212,11 +213,11 @@ onMounted(() => {
     },
     // 以下阶段3：拾取开关 / 聚焦 / 主题 / 编辑直改
     onPickMode: (enabled) => {
-      if (!handle?.selection) return
+      if (!handle) return
       enabled ? handle.selection.enable() : handle.selection.disable()
     },
     onPickGranularity: (mode) => {
-      handle?.selection?.setGranularity(mode)
+      handle?.selection.setGranularity(mode)
     },
     onFlyTo: (targetId) => {
       handle?.flyTo?.(targetId)
