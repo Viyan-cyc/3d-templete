@@ -15,6 +15,8 @@
  */
 import exampleUrl from './models/example.glb?url';
 import rackUrl from './models/rack.glb?url';
+import lithiumBatteryUrl from './models/lithiumBattery.glb?url';
+import smartPowerUrl from './models/smartPower.glb?url';
 
 /**
  * 资源条目（元数据 + src）。manifest.ts 据此 ASSET_MANIFEST 注册 + 检索（检索剥 src）。
@@ -71,6 +73,24 @@ export const ASSET_CATALOG: AssetCatalogEntry[] = [
     format: 'glb',
     description: '标准服务器机柜模型，机房 / 数据中心场景用。',
     src: rackUrl,
+  },
+  {
+    id: 'lithiumBattery',
+    name: '锂电池组',
+    category: 'energy',
+    tags: ['battery', 'lithium', '储能', '锂电池', '电池组', 'ess', 'energy storage', '能源'],
+    format: 'glb',
+    description: '储能锂电池组模型，能源 / 储能电站 / 微电网场景用，可多个并排组成电池阵列。',
+    src: lithiumBatteryUrl,
+  },
+  {
+    id: 'smartPower',
+    name: '智能电源',
+    category: 'energy',
+    tags: ['power', 'smart power', '智能电源', '电源', '配电', '供电', '能源'],
+    format: 'glb',
+    description: '智能电源柜模型，能源 / 储能电站 / 微电网场景用，负责配电与供电管理，可与锂电池组搭配布置。',
+    src: smartPowerUrl,
   },
 ];
 
